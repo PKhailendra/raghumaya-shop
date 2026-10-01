@@ -1,0 +1,101 @@
+# RaghuMayaShop — local development stack
+# Usage: docker compose up --build
+#
+# Services:
+#   postgres  PostgreSQL 16 (port 5432)
+#   redis     Redis 7 (port 6379)
+#   api       RaghuMayaShop Express API (port 4000)
+#   worker    BullMQ background worker (shares the API image)
+#   web       Next.js dashboard placeholder (port 3000) — built by the web agent
+
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: raghumaya-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: raghumaya
+      POSTGRES_PASSWORD: raghumaya
+      POSTGRES_DB: raghumaya
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raghumaya -d raghumaya"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: raghumaya-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+    container_name: raghumaya-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://raghumaya:raghumaya@postgres:5432/raghumaya
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: change-me-to-a-long-random-secret
+      CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "4000:4000"
+    command: ["sh", "-c", "npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/server.js"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+    container_name: raghumaya-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://raghumaya:raghumaya@postgres:5432/raghumaya
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: change-me-to-a-long-random-secret
+    command: ["node", "apps/api/dist/jobs/worker.js"]
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: raghumaya-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
+  redisdata:

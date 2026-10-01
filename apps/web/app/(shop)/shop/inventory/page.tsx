@@ -1,0 +1,331 @@
+"use client";
+
+import type React from "react";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { inventoryApi, ApiError, type Product } from "@/lib/api";
+import { inr, toTitle } from "@/lib/format";
+import { PageHeader, ErrorState, EmptyState, TableSkeleton } from "@/components/states";
+import { Pagination } from "@/components/pagination";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Search, Plus, ScanBarcode, Pencil, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+
+export default function ShopInventoryPage() {
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [editor, setEditor] = useState<{ product?: Product } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [barcode, setBarcode] = useState("");
+  const [barcodeResult, setBarcodeResult] = useState<Product | null>(null);
+  const [barcodeError, setBarcodeError] = useState<string | null>(null);
+  const [barcodeBusy, setBarcodeBusy] = useState(false);
+  const queryClient = useQueryClient();
+
+  const products = useQuery({
+    queryKey: ["shop", "products", page, search, categoryId],
+    queryFn: () =>
+      inventoryApi.products({ page, limit: 20, search: search || undefined, categoryId: categoryId || undefined }),
+  });
+  const categories = useQuery({
+    queryKey: ["shop", "categories"],
+    queryFn: () => inventoryApi.categories(),
+  });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["shop", "products"] });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => inventoryApi.deleteProduct(id),
+    onSuccess: invalidate,
+  });
+
+  const lookupBarcode = async () => {
+    setBarcodeError(null);
+    setBarcodeResult(null);
+    if (!barcode.trim()) return;
+    setBarcodeBusy(true);
+    try {
+      const p = await inventoryApi.lookup("barcode", barcode.trim());
+      setBarcodeResult(p);
+    } catch (err) {
+      setBarcodeError(err instanceof ApiError ? err.message : "Product not found.");
+    } finally {
+      setBarcodeBusy(false);
+    }
+  };
+
+  const categoryOptions = toOptions(categories.data, "category");
+  const rows = products.data?.data ?? [];
+  const total = products.data?.meta.total ?? 0;
+
+  return (
+    <div>
+      <PageHeader
+        title="Inventory"
+        description="Products, variants and batches."
+        actions={
+          <Button onClick={() => setEditor({})}>
+            <Plus className="h-4 w-4" /> Add product
+          </Button>
+        }
+      />
+
+      {/* Barcode lookup */}
+      <Card className="mb-4">
+        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
+          <div className="flex-1 space-y-1">
+            <Label htmlFor="barcode">Barcode lookup</Label>
+            <Input
+              id="barcode"
+              placeholder="Scan or type a barcode…"
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && lookupBarcode()}
+            />
+          </div>
+          <Button onClick={lookupBarcode} disabled={barcodeBusy}>
+            <ScanBarcode className="h-4 w-4 mr-1" /> {barcodeBusy ? "Looking up…" : "Look up"}
+          </Button>
+        </CardContent>
+        {(barcodeResult || barcodeError) && (
+          <CardContent className="pt-0">
+            {barcodeError && <div className="text-sm text-destructive">{barcodeError}</div>}
+            {barcodeResult && (
+              <div className="flex items-center justify-between rounded-md bg-muted p-3 text-sm">
+                <div>
+                  <div className="font-medium">{barcodeResult.name}</div>
+                  <div className="text-xs text-muted-foreground">SKU {barcodeResult.sku} · Stock {barcodeResult.currentStock}</div>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => { setEditor({ product: barcodeResult }); }}>
+                  <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search products…"
+            className="pl-9"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          />
+        </div>
+        <Select
+          className="w-full sm:w-48"
+          value={categoryId}
+          onChange={(v) => { setCategoryId(v); setPage(1); }}
+          placeholder="All categories"
+          options={[{ value: "", label: "All categories" }, ...categoryOptions]}
+        />
+      </div>
+
+      {products.isLoading ? (
+        <TableSkeleton />
+      ) : products.isError ? (
+        <ErrorState
+          message={products.error instanceof ApiError ? products.error.message : "Could not load products."}
+          onRetry={() => products.refetch()}
+        />
+      ) : rows.length === 0 ? (
+        <EmptyState
+          title="No products"
+          description="Add your first product to start managing inventory."
+          action={<Button onClick={() => setEditor({})}><Plus className="h-4 w-4" /> Add product</Button>}
+        />
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Product</TableHead>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead className="text-right">Price</TableHead>
+                  <TableHead className="text-right">Stock</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell>
+                      <div className="font-medium">{p.name}</div>
+                      {p.barcode && <div className="text-xs text-muted-foreground font-mono">{p.barcode}</div>}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{p.sku}</TableCell>
+                    <TableCell>{p.category?.name ?? "-"}</TableCell>
+                    <TableCell className="text-right">{inr(p.sellingPrice)}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant={p.currentStock <= 0 ? "destructive" : p.currentStock < 10 ? "warning" : "success"}>
+                        {p.currentStock}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button size="sm" variant="outline" onClick={() => setEditor({ product: p })}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => setDeleteTarget(p)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+
+      {editor && (
+        <ProductEditor
+          product={editor.product}
+          categories={categoryOptions}
+          onClose={() => setEditor(null)}
+          onSaved={() => { setEditor(null); invalidate(); }}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete product"
+        description={`Delete "${deleteTarget?.name}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        busy={deleteMutation.isPending}
+        onConfirm={() => { void deleteMutation.mutateAsync(deleteTarget!.id); }}
+      />
+    </div>
+  );
+}
+
+function toOptions(data: unknown, _kind: string): { value: string; label: string }[] {
+  const list = Array.isArray(data) ? data : (data as { data?: unknown[] })?.data ?? [];
+  return (list as { id: string; name: string }[]).map((c) => ({ value: c.id, label: c.name }));
+}
+
+function ProductEditor({
+  product,
+  categories,
+  onClose,
+  onSaved,
+}: {
+  product?: Product;
+  categories: { value: string; label: string }[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(product?.name ?? "");
+  const [sku, setSku] = useState(product?.sku ?? "");
+  const [barcode, setBarcode] = useState(product?.barcode ?? "");
+  const [categoryId, setCategoryId] = useState(product?.categoryId ?? "");
+  const [sellingPrice, setSellingPrice] = useState(product?.sellingPrice ?? "");
+  const [purchasePrice, setPurchasePrice] = useState(product?.purchasePrice ?? "");
+  const [mrp, setMrp] = useState(product?.mrp ?? "");
+  const [gstRate, setGstRate] = useState(product?.gstRate ?? "0");
+  const [unit, setUnit] = useState(product?.unit ?? "pcs");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!name.trim()) return setError("Product name is required.");
+    if (!sku.trim()) return setError("SKU is required.");
+    if (!sellingPrice || Number(sellingPrice) <= 0) return setError("Selling price must be greater than 0.");
+    setBusy(true);
+    try {
+      const body = {
+        name: name.trim(),
+        sku: sku.trim(),
+        barcode: barcode.trim() || undefined,
+        categoryId: categoryId || undefined,
+        sellingPrice,
+        purchasePrice: purchasePrice || undefined,
+        mrp: mrp || undefined,
+        gstRate,
+        unit,
+      };
+      if (product) await inventoryApi.updateProduct(product.id, body);
+      else await inventoryApi.createProduct(body);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save the product.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{product ? "Edit product" : "Add product"}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          {error && <div className="text-sm text-destructive">{error}</div>}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2 col-span-2 sm:col-span-1">
+              <Label htmlFor="p-name">Name *</Label>
+              <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="space-y-2 col-span-2 sm:col-span-1">
+              <Label htmlFor="p-sku">SKU *</Label>
+              <Input id="p-sku" value={sku} onChange={(e) => setSku(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="p-barcode">Barcode</Label>
+              <Input id="p-barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={categoryId} onChange={setCategoryId} placeholder="No category" options={[{ value: "", label: "No category" }, ...categories]} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="p-sell">Selling price *</Label>
+              <Input id="p-sell" type="number" min="0" step="0.01" value={sellingPrice} onChange={(e) => setSellingPrice(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="p-buy">Purchase price</Label>
+              <Input id="p-buy" type="number" min="0" step="0.01" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="p-mrp">MRP</Label>
+              <Input id="p-mrp" type="number" min="0" step="0.01" value={mrp} onChange={(e) => setMrp(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>GST rate</Label>
+              <Select value={gstRate} onChange={setGstRate} options={["0", "5", "12", "18", "28"].map((g) => ({ value: g, label: `${g}%` }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Unit</Label>
+              <Select value={unit} onChange={setUnit} options={["pcs", "kg", "g", "ltr", "ml", "box", "pack"].map((u) => ({ value: u, label: toTitle(u) }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+            <Button type="submit" disabled={busy}>{busy ? "Saving…" : product ? "Save changes" : "Add product"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

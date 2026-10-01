@@ -1,0 +1,1253 @@
+// RaghuMayaShop — Prisma schema (PostgreSQL)
+// Conventions: UUID ids, createdAt/updatedAt/deletedAt everywhere, Decimal for money,
+// shopId on every tenant table, unique constraints per design docs.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================ ENUMS ============================
+
+enum AccountStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+  BLOCKED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  SUPPORT
+  FINANCE
+  AUDITOR
+}
+
+enum MembershipStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+  BLOCKED
+}
+
+enum ShopStatus {
+  ACTIVE
+  SUSPENDED
+  BLOCKED
+}
+
+enum ShopPermission {
+  SHOP_VIEW
+  SHOP_UPDATE
+  EMPLOYEE_VIEW
+  EMPLOYEE_CREATE
+  EMPLOYEE_UPDATE
+  EMPLOYEE_DELETE
+  INVENTORY_VIEW
+  INVENTORY_CREATE
+  INVENTORY_UPDATE
+  INVENTORY_DELETE
+  STOCK_VIEW
+  STOCK_ADJUST
+  CUSTOMER_VIEW
+  CUSTOMER_CREATE
+  CUSTOMER_UPDATE
+  CUSTOMER_DELETE
+  ORDER_VIEW
+  ORDER_CREATE
+  ORDER_UPDATE
+  ORDER_CANCEL
+  INVOICE_VIEW
+  INVOICE_CREATE
+  INVOICE_UPDATE
+  PAYMENT_VIEW
+  PAYMENT_CREATE
+  FINANCE_VIEW
+  FINANCE_CREATE
+  FINANCE_UPDATE
+  FINANCE_DELETE
+  ANALYTICS_VIEW
+  SETTINGS_VIEW
+  SETTINGS_UPDATE
+  SUBSCRIPTION_VIEW
+  SUBSCRIPTION_MANAGE
+  REFERRAL_VIEW
+  REFERRAL_MANAGE
+  NOTIFICATION_VIEW
+  NOTIFICATION_UPDATE
+  AUDIT_VIEW
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  CASHIER
+  ACCOUNTANT
+  INVENTORY_STAFF
+  STAFF
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  CARD
+  BANK_TRANSFER
+  CHEQUE
+}
+
+enum PaymentDirection {
+  IN
+  OUT
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  TRANSFER
+  ADJUSTMENT
+  PURCHASE
+  SALE
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+enum PlanCode {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum ActorType {
+  account
+  admin
+}
+
+// ======================== IDENTITY & TENANCY ========================
+
+model Account {
+  id              String        @id @default(uuid()) @db.Uuid
+  fullName        String        @db.VarChar(150)
+  email           String?       @unique @db.VarChar(180)
+  phone           String        @unique @db.VarChar(30)
+  passwordHash    String
+  status          AccountStatus @default(PENDING)
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  memberships ShopMembership[]
+  ownedShops  Shop[]           @relation("ShopOwner")
+  // twoFactor is looked up polymorphically via TwoFactorSetting(actorType, actorId)
+
+  @@index([status])
+  @@map("accounts")
+}
+
+model Admin {
+  id               String        @id @default(uuid()) @db.Uuid
+  fullName         String        @db.VarChar(150)
+  email            String        @unique @db.VarChar(180)
+  phone            String?       @unique @db.VarChar(30)
+  passwordHash     String
+  role             AdminRole     @default(ADMIN)
+  status           AccountStatus @default(ACTIVE)
+  permissions      String[]      @default([])
+  emailVerifiedAt  DateTime?
+  phoneVerifiedAt  DateTime?
+  lastLoginAt      DateTime?
+  createdByAdminId String?       @db.Uuid
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  deletedAt        DateTime?
+
+  createdShops Shop[] @relation("ShopCreatedByAdmin")
+
+  @@index([role])
+  @@index([status])
+  @@map("admins")
+}
+
+model Shop {
+  id               String     @id @default(uuid()) @db.Uuid
+  name             String     @db.VarChar(150)
+  slug             String?    @unique @db.VarChar(180)
+  ownerAccountId   String?    @db.Uuid
+  owner            Account?   @relation("ShopOwner", fields: [ownerAccountId], references: [id], onDelete: SetNull)
+  phone            String?    @db.VarChar(30)
+  email            String?    @db.VarChar(180)
+  address          String?    @db.VarChar(500)
+  city             String?    @db.VarChar(100)
+  state            String?    @db.VarChar(100)
+  pincode          String?    @db.VarChar(20)
+  gstNumber        String?    @db.VarChar(20)
+  logoUrl          String?    @db.VarChar(500)
+  currency         String     @default("INR") @db.VarChar(3)
+  timezone         String     @default("Asia/Kolkata") @db.VarChar(60)
+  status           ShopStatus @default(ACTIVE)
+  settings         Json?
+  createdByAdminId String?    @db.Uuid
+  createdByAdmin   Admin?     @relation("ShopCreatedByAdmin", fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  deletedAt        DateTime?
+
+  memberships       ShopMembership[]
+  categories        Category[]
+  brands            Brand[]
+  products          Product[]
+  warehouses        Warehouse[]
+  suppliers         Supplier[]
+  purchases         Purchase[]
+  customers         Customer[]
+  orders            Order[]
+  invoices          Invoice[]
+  payments          Payment[]
+  financeCategories FinanceCategory[]
+  revenues          Revenue[]
+  expenses          Expense[]
+  assets            Asset[]
+  liabilities       Liability[]
+  subscriptions     Subscription[]
+  notifications     Notification[]
+  smsLogs           SmsLog[]
+  auditLogs         AuditLog[]
+  tickets           SupportTicket[]
+
+  @@index([status])
+  @@index([ownerAccountId])
+  @@map("shops")
+}
+
+model ShopMembership {
+  id             String           @id @default(uuid()) @db.Uuid
+  shopId         String           @db.Uuid
+  shop           Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  accountId      String           @db.Uuid
+  account        Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  role           UserRole         @default(STAFF)
+  status         MembershipStatus @default(ACTIVE)
+  permissions    ShopPermission[] @default([])
+  invitedById    String?          @db.Uuid
+  joinedAt       DateTime?
+  lastAccessedAt DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+
+  @@unique([shopId, accountId])
+  @@index([accountId, status])
+  @@index([shopId, role])
+  @@index([shopId, status])
+  @@map("shop_memberships")
+}
+
+// ===================== SESSIONS / DEVICES / TOKENS =====================
+
+model Device {
+  id          String    @id @default(uuid()) @db.Uuid
+  actorType   ActorType
+  actorId     String    @db.Uuid
+  deviceId    String    @db.VarChar(120)
+  fingerprint String    @db.VarChar(64)
+  name        String?   @db.VarChar(150)
+  type        String?   @db.VarChar(40)
+  platform    String?   @db.VarChar(60)
+  browser     String?   @db.VarChar(120)
+  userAgent   String?   @db.VarChar(500)
+  ipAddress   String?   @db.VarChar(60)
+  lastSeenAt  DateTime  @default(now())
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@unique([actorType, actorId, deviceId])
+  @@index([fingerprint])
+  @@map("devices")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  actorType ActorType
+  actorId   String    @db.Uuid
+  deviceId  String?   @db.VarChar(120)
+  tokenHash String    @unique @db.VarChar(128)
+  expiresAt DateTime
+  revokedAt DateTime?
+  ipAddress String?   @db.VarChar(60)
+  userAgent String?   @db.VarChar(500)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([actorType, actorId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  actorType ActorType
+  actorId   String    @db.Uuid
+  tokenHash String    @unique @db.VarChar(128)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([actorType, actorId])
+  @@map("password_reset_tokens")
+}
+
+model VerificationToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  channel     String    @db.VarChar(10) // EMAIL | SMS
+  purpose     String    @db.VarChar(30) // LOGIN | EMAIL_VERIFY | SMS_VERIFY | TWO_FACTOR
+  identifier  String    @db.VarChar(180) // email or phone
+  codeHash    String    @db.VarChar(128)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([identifier, purpose, channel])
+  @@index([expiresAt])
+  @@map("verification_tokens")
+}
+
+model TwoFactorSetting {
+  id                  String    @id @default(uuid()) @db.Uuid
+  actorType           ActorType
+  // Polymorphic: actorId references Account or Admin by actorType (no FK).
+  actorId             String    @db.Uuid
+  enabled             Boolean   @default(false)
+  methods             String[]  @default([]) // AUTHENTICATOR | SMS | EMAIL
+  totpSecretEncrypted String?
+  totpVerifiedAt      DateTime?
+  backupCodes         Json? // [{ hash, usedAt }]
+  lastUsedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  @@unique([actorType, actorId])
+  @@index([actorType, actorId])
+  @@map("two_factor_settings")
+}
+
+model UserProfileChange {
+  id              String    @id @default(uuid()) @db.Uuid
+  requesterType   ActorType
+  requesterId     String    @db.Uuid
+  shopId          String?   @db.Uuid
+  entityType      String    @db.VarChar(40) // account | shop | membership
+  entityId        String?   @db.Uuid
+  changes         Json
+  reason          String?   @db.VarChar(1000)
+  status          String    @default("PENDING") @db.VarChar(20) // PENDING | APPROVED | REJECTED
+  reviewerAdminId String?   @db.Uuid
+  reviewedAt      DateTime?
+  reviewNote      String?   @db.VarChar(1000)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  @@index([status])
+  @@index([requesterType, requesterId])
+  @@map("user_profile_changes")
+}
+
+// ============================ INVENTORY ============================
+
+model Category {
+  id          String     @id @default(uuid()) @db.Uuid
+  shopId      String     @db.Uuid
+  shop        Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name        String     @db.VarChar(120)
+  parentId    String?    @db.Uuid
+  parent      Category?  @relation("CategoryParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[] @relation("CategoryParent")
+  description String?    @db.VarChar(500)
+  imageUrl    String?    @db.VarChar(500)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  deletedAt   DateTime?
+
+  products Product[]
+
+  @@unique([shopId, name])
+  @@index([shopId, parentId])
+  @@map("categories")
+}
+
+model Brand {
+  id          String    @id @default(uuid()) @db.Uuid
+  shopId      String    @db.Uuid
+  shop        Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name        String    @db.VarChar(120)
+  description String?   @db.VarChar(500)
+  logoUrl     String?   @db.VarChar(500)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  products Product[]
+
+  @@unique([shopId, name])
+  @@map("brands")
+}
+
+model Product {
+  id            String    @id @default(uuid()) @db.Uuid
+  shopId        String    @db.Uuid
+  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  categoryId    String?   @db.Uuid
+  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brandId       String?   @db.Uuid
+  brand         Brand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  name          String    @db.VarChar(200)
+  sku           String?   @db.VarChar(60)
+  barcode       String?   @db.VarChar(60)
+  qrCode        String?   @db.VarChar(120)
+  description   String?   @db.VarChar(2000)
+  unit          String    @default("pcs") @db.VarChar(20)
+  purchasePrice Decimal   @default(0) @db.Decimal(14, 2)
+  sellingPrice  Decimal   @default(0) @db.Decimal(14, 2)
+  mrp           Decimal?  @db.Decimal(14, 2)
+  taxRate       Decimal   @default(0) @db.Decimal(5, 2)
+  hsnCode       String?   @db.VarChar(20)
+  currentStock  Decimal   @default(0) @db.Decimal(14, 3)
+  reorderLevel  Decimal   @default(0) @db.Decimal(14, 3)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  images      ProductImage[]
+  variants    ProductVariant[]
+  batches     ProductBatch[]
+  stockLevels StockLevel[]
+
+  @@unique([shopId, sku])
+  @@unique([shopId, barcode])
+  @@unique([shopId, qrCode])
+  @@index([shopId, name])
+  @@index([shopId, categoryId])
+  @@index([shopId, isActive])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String    @id @default(uuid()) @db.Uuid
+  productId String    @db.Uuid
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String    @db.VarChar(500)
+  isPrimary Boolean   @default(false)
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([productId, sortOrder])
+  @@map("product_images")
+}
+
+model ProductVariant {
+  id            String    @id @default(uuid()) @db.Uuid
+  productId     String    @db.Uuid
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name          String    @db.VarChar(120)
+  sku           String?   @db.VarChar(60)
+  barcode       String?   @db.VarChar(60)
+  qrCode        String?   @db.VarChar(120)
+  attributes    Json?
+  purchasePrice Decimal?  @db.Decimal(14, 2)
+  sellingPrice  Decimal?  @db.Decimal(14, 2)
+  currentStock  Decimal   @default(0) @db.Decimal(14, 3)
+  reorderLevel  Decimal   @default(0) @db.Decimal(14, 3)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  batches ProductBatch[]
+
+  @@unique([productId, sku])
+  @@unique([productId, barcode])
+  @@unique([productId, qrCode])
+  @@map("product_variants")
+}
+
+model ProductBatch {
+  id                String          @id @default(uuid()) @db.Uuid
+  shopId            String          @db.Uuid
+  productId         String          @db.Uuid
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId         String?         @db.Uuid
+  variant           ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  batchNumber       String          @db.VarChar(60)
+  manufacturingDate DateTime?
+  expiryDate        DateTime?
+  quantity          Decimal         @default(0) @db.Decimal(14, 3)
+  purchasePrice     Decimal?        @db.Decimal(14, 2)
+  sellingPrice      Decimal?        @db.Decimal(14, 2)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  deletedAt         DateTime?
+
+  @@unique([shopId, productId, variantId, batchNumber])
+  @@index([shopId, expiryDate])
+  @@map("product_batches")
+}
+
+// ============================== STOCK ==============================
+
+model Warehouse {
+  id        String    @id @default(uuid()) @db.Uuid
+  shopId    String    @db.Uuid
+  shop      Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name      String    @db.VarChar(150)
+  code      String?   @db.VarChar(30)
+  address   String?   @db.VarChar(500)
+  isDefault Boolean   @default(false)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([shopId, name])
+  @@map("warehouses")
+}
+
+model StockLevel {
+  id          String    @id @default(uuid()) @db.Uuid
+  shopId      String    @db.Uuid
+  warehouseId String    @db.Uuid
+  productId   String    @db.Uuid
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId   String?   @db.Uuid
+  batchId     String?   @db.Uuid
+  quantity    Decimal   @default(0) @db.Decimal(14, 3)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@unique([shopId, warehouseId, productId, variantId, batchId])
+  @@index([shopId, productId])
+  @@map("stock_levels")
+}
+
+model StockMovement {
+  id            String            @id @default(uuid()) @db.Uuid
+  shopId        String            @db.Uuid
+  warehouseId   String?           @db.Uuid
+  productId     String            @db.Uuid
+  variantId     String?           @db.Uuid
+  batchId       String?           @db.Uuid
+  type          StockMovementType
+  quantity      Decimal           @db.Decimal(14, 3)
+  unitCost      Decimal?          @db.Decimal(14, 2)
+  referenceType String            @db.VarChar(30) // MANUAL | PURCHASE | SALE | TRANSFER | ADJUSTMENT
+  referenceId   String?           @db.Uuid
+  notes         String?           @db.VarChar(500)
+  createdById   String?           @db.Uuid
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?
+
+  @@index([shopId, productId, createdAt])
+  @@index([shopId, warehouseId, createdAt])
+  @@index([shopId, type, createdAt])
+  @@map("stock_movements")
+}
+
+model StockTransfer {
+  id              String    @id @default(uuid()) @db.Uuid
+  shopId          String    @db.Uuid
+  transferNumber  String    @db.VarChar(40)
+  fromWarehouseId String    @db.Uuid
+  toWarehouseId   String    @db.Uuid
+  status          String    @default("COMPLETED") @db.VarChar(20) // PENDING | COMPLETED | CANCELLED
+  notes           String?   @db.VarChar(500)
+  createdById     String?   @db.Uuid
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  items StockTransferItem[]
+
+  @@unique([shopId, transferNumber])
+  @@index([shopId, createdAt])
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id         String        @id @default(uuid()) @db.Uuid
+  transferId String        @db.Uuid
+  transfer   StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  productId  String        @db.Uuid
+  variantId  String?       @db.Uuid
+  batchId    String?       @db.Uuid
+  quantity   Decimal       @db.Decimal(14, 3)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  deletedAt  DateTime?
+
+  @@map("stock_transfer_items")
+}
+
+// ========================= PURCHASES / ORDERS =========================
+
+model Supplier {
+  id        String    @id @default(uuid()) @db.Uuid
+  shopId    String    @db.Uuid
+  shop      Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name      String    @db.VarChar(150)
+  phone     String?   @db.VarChar(30)
+  email     String?   @db.VarChar(180)
+  address   String?   @db.VarChar(500)
+  gstNumber String?   @db.VarChar(20)
+  notes     String?   @db.VarChar(1000)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  purchases Purchase[]
+
+  @@index([shopId, name])
+  @@index([shopId, phone])
+  @@map("suppliers")
+}
+
+model Purchase {
+  id             String    @id @default(uuid()) @db.Uuid
+  shopId         String    @db.Uuid
+  shop           Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  supplierId     String?   @db.Uuid
+  supplier       Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  purchaseNumber String    @db.VarChar(40)
+  purchaseDate   DateTime  @default(now())
+  status         String    @default("RECEIVED") @db.VarChar(20) // DRAFT | RECEIVED | CANCELLED
+  subtotal       Decimal   @default(0) @db.Decimal(14, 2)
+  taxTotal       Decimal   @default(0) @db.Decimal(14, 2)
+  totalAmount    Decimal   @default(0) @db.Decimal(14, 2)
+  paidAmount     Decimal   @default(0) @db.Decimal(14, 2)
+  notes          String?   @db.VarChar(1000)
+  createdById    String?   @db.Uuid
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  items PurchaseItem[]
+
+  @@unique([shopId, purchaseNumber])
+  @@index([shopId, purchaseDate])
+  @@index([shopId, supplierId])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id          String    @id @default(uuid()) @db.Uuid
+  purchaseId  String    @db.Uuid
+  purchase    Purchase  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId   String    @db.Uuid
+  variantId   String?   @db.Uuid
+  batchNumber String?   @db.VarChar(60)
+  quantity    Decimal   @db.Decimal(14, 3)
+  unitCost    Decimal   @db.Decimal(14, 2)
+  taxRate     Decimal   @default(0) @db.Decimal(5, 2)
+  lineTotal   Decimal   @db.Decimal(14, 2)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@map("purchase_items")
+}
+
+model Order {
+  id          String    @id @default(uuid()) @db.Uuid
+  shopId      String    @db.Uuid
+  shop        Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerId  String?   @db.Uuid
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  orderNumber String    @db.VarChar(40)
+  status      String    @default("PENDING") @db.VarChar(20)
+  subtotal    Decimal   @default(0) @db.Decimal(14, 2)
+  taxTotal    Decimal   @default(0) @db.Decimal(14, 2)
+  totalAmount Decimal   @default(0) @db.Decimal(14, 2)
+  notes       String?   @db.VarChar(1000)
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  items OrderItem[]
+
+  @@unique([shopId, orderNumber])
+  @@index([shopId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String    @id @default(uuid()) @db.Uuid
+  orderId      String    @db.Uuid
+  order        Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String    @db.Uuid
+  variantId    String?   @db.Uuid
+  quantity     Decimal   @db.Decimal(14, 3)
+  unitPrice    Decimal   @db.Decimal(14, 2)
+  discountRate Decimal   @default(0) @db.Decimal(5, 2)
+  taxRate      Decimal   @default(0) @db.Decimal(5, 2)
+  lineTotal    Decimal   @db.Decimal(14, 2)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  @@map("order_items")
+}
+
+// ============================ CUSTOMERS ============================
+
+model Customer {
+  id                 String    @id @default(uuid()) @db.Uuid
+  shopId             String    @db.Uuid
+  shop               Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name               String    @db.VarChar(150)
+  phone              String?   @db.VarChar(30)
+  email              String?   @db.VarChar(180)
+  address            String?   @db.VarChar(500)
+  city               String?   @db.VarChar(100)
+  state              String?   @db.VarChar(100)
+  pincode            String?   @db.VarChar(20)
+  gstNumber          String?   @db.VarChar(20)
+  creditLimit        Decimal   @default(0) @db.Decimal(14, 2)
+  outstandingBalance Decimal   @default(0) @db.Decimal(14, 2)
+  notes              String?   @db.VarChar(1000)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  invoices  Invoice[]
+  orders    Order[]
+  reminders CustomerReminder[]
+
+  @@index([shopId, name])
+  @@index([shopId, phone])
+  @@index([shopId, email])
+  @@map("customers")
+}
+
+model CustomerReminder {
+  id         String    @id @default(uuid()) @db.Uuid
+  shopId     String    @db.Uuid
+  customerId String    @db.Uuid
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  invoiceId  String?   @db.Uuid
+  channel    String    @db.VarChar(10) // SMS | WHATSAPP
+  recipient  String    @db.VarChar(30)
+  message    String    @db.VarChar(1000)
+  invoiceUrl String?   @db.VarChar(500)
+  status     String    @default("QUEUED") @db.VarChar(20) // QUEUED | SENT | FAILED
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  @@index([shopId, customerId, createdAt])
+  @@map("customer_reminders")
+}
+
+// ============================= BILLING =============================
+
+model Invoice {
+  id                String        @id @default(uuid()) @db.Uuid
+  shopId            String        @db.Uuid
+  shop              Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerId        String?       @db.Uuid
+  customer          Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  orderId           String?       @unique @db.Uuid
+  invoiceNumber     String        @db.VarChar(40)
+  status            InvoiceStatus @default(DRAFT)
+  issueDate         DateTime      @default(now())
+  dueDate           DateTime?
+  placeOfSupply     String?       @db.VarChar(100)
+  customerGstNumber String?       @db.VarChar(20)
+  isInterState      Boolean       @default(false)
+  subtotal          Decimal       @default(0) @db.Decimal(14, 2)
+  discountTotal     Decimal       @default(0) @db.Decimal(14, 2)
+  taxableTotal      Decimal       @default(0) @db.Decimal(14, 2)
+  cgstTotal         Decimal       @default(0) @db.Decimal(14, 2)
+  sgstTotal         Decimal       @default(0) @db.Decimal(14, 2)
+  igstTotal         Decimal       @default(0) @db.Decimal(14, 2)
+  taxTotal          Decimal       @default(0) @db.Decimal(14, 2)
+  totalAmount       Decimal       @default(0) @db.Decimal(14, 2)
+  paidAmount        Decimal       @default(0) @db.Decimal(14, 2)
+  pdfUrl            String?       @db.VarChar(500)
+  pdfPath           String?       @db.VarChar(500)
+  notes             String?       @db.VarChar(2000)
+  terms             String?       @db.VarChar(2000)
+  createdById       String?       @db.Uuid
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime?
+
+  items       InvoiceItem[]
+  payments    Payment[]
+  shareTokens InvoiceShareToken[]
+
+  @@unique([shopId, invoiceNumber])
+  @@index([shopId, status, issueDate])
+  @@index([shopId, customerId])
+  @@index([shopId, issueDate])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id             String    @id @default(uuid()) @db.Uuid
+  invoiceId      String    @db.Uuid
+  invoice        Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId      String?   @db.Uuid
+  variantId      String?   @db.Uuid
+  description    String    @db.VarChar(300)
+  hsnCode        String?   @db.VarChar(20)
+  quantity       Decimal   @db.Decimal(14, 3)
+  unitPrice      Decimal   @db.Decimal(14, 2)
+  discountRate   Decimal   @default(0) @db.Decimal(5, 2)
+  gstRate        Decimal   @default(0) @db.Decimal(5, 2)
+  lineGross      Decimal   @db.Decimal(14, 2)
+  discountAmount Decimal   @db.Decimal(14, 2)
+  taxableAmount  Decimal   @db.Decimal(14, 2)
+  gstAmount      Decimal   @db.Decimal(14, 2)
+  cgstAmount     Decimal   @default(0) @db.Decimal(14, 2)
+  sgstAmount     Decimal   @default(0) @db.Decimal(14, 2)
+  igstAmount     Decimal   @default(0) @db.Decimal(14, 2)
+  lineTotal      Decimal   @db.Decimal(14, 2)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  @@index([invoiceId])
+  @@index([productId])
+  @@map("invoice_items")
+}
+
+model InvoiceShareToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  invoiceId   String    @db.Uuid
+  invoice     Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  token       String    @unique @db.VarChar(128)
+  channel     String?   @db.VarChar(20) // LINK | SMS | WHATSAPP
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([invoiceId])
+  @@map("invoice_share_tokens")
+}
+
+model Payment {
+  id              String           @id @default(uuid()) @db.Uuid
+  shopId          String           @db.Uuid
+  shop            Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  invoiceId       String?          @db.Uuid
+  invoice         Invoice?         @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  purchaseId      String?          @db.Uuid
+  customerId      String?          @db.Uuid
+  supplierId      String?          @db.Uuid
+  amount          Decimal          @db.Decimal(14, 2)
+  mode            PaymentMode      @default(CASH)
+  direction       PaymentDirection @default(IN)
+  paymentDate     DateTime         @default(now())
+  referenceNumber String?          @db.VarChar(100)
+  notes           String?          @db.VarChar(1000)
+  receivedById    String?          @db.Uuid
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  deletedAt       DateTime?
+
+  @@index([shopId, invoiceId])
+  @@index([shopId, customerId, paymentDate])
+  @@index([shopId, paymentDate])
+  @@index([shopId, direction, paymentDate])
+  @@map("payments")
+}
+
+// ============================= FINANCE =============================
+
+model FinanceCategory {
+  id          String    @id @default(uuid()) @db.Uuid
+  shopId      String    @db.Uuid
+  shop        Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name        String    @db.VarChar(120)
+  type        String    @db.VarChar(10) // INCOME | EXPENSE
+  description String?   @db.VarChar(500)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  revenues Revenue[]
+  expenses Expense[]
+
+  @@unique([shopId, name, type])
+  @@map("finance_categories")
+}
+
+model Revenue {
+  id           String           @id @default(uuid()) @db.Uuid
+  shopId       String           @db.Uuid
+  shop         Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  categoryId   String?          @db.Uuid
+  category     FinanceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  title        String           @db.VarChar(200)
+  amount       Decimal          @db.Decimal(14, 2)
+  revenueDate  DateTime         @default(now())
+  source       String?          @db.VarChar(120)
+  notes        String?          @db.VarChar(1000)
+  receivedById String?          @db.Uuid
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  deletedAt    DateTime?
+
+  @@index([shopId, revenueDate])
+  @@index([shopId, categoryId])
+  @@map("revenues")
+}
+
+model Expense {
+  id          String           @id @default(uuid()) @db.Uuid
+  shopId      String           @db.Uuid
+  shop        Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  categoryId  String?          @db.Uuid
+  category    FinanceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  title       String           @db.VarChar(200)
+  amount      Decimal          @db.Decimal(14, 2)
+  expenseDate DateTime         @default(now())
+  paymentMode PaymentMode?
+  notes       String?          @db.VarChar(1000)
+  createdById String?          @db.Uuid
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime?
+
+  @@index([shopId, expenseDate])
+  @@index([shopId, categoryId])
+  @@map("expenses")
+}
+
+model Asset {
+  id            String    @id @default(uuid()) @db.Uuid
+  shopId        String    @db.Uuid
+  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name          String    @db.VarChar(200)
+  assetType     String?   @db.VarChar(80)
+  purchaseValue Decimal   @db.Decimal(14, 2)
+  currentValue  Decimal   @db.Decimal(14, 2)
+  purchaseDate  DateTime?
+  status        String    @default("ACTIVE") @db.VarChar(20) // ACTIVE | DISPOSED
+  notes         String?   @db.VarChar(1000)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([shopId, status])
+  @@map("assets")
+}
+
+model Liability {
+  id                String    @id @default(uuid()) @db.Uuid
+  shopId            String    @db.Uuid
+  shop              Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name              String    @db.VarChar(200)
+  liabilityType     String?   @db.VarChar(80)
+  totalAmount       Decimal   @db.Decimal(14, 2)
+  outstandingAmount Decimal   @db.Decimal(14, 2)
+  dueDate           DateTime?
+  status            String    @default("OPEN") @db.VarChar(20) // OPEN | CLOSED
+  notes             String?   @db.VarChar(1000)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  @@index([shopId, status])
+  @@index([shopId, dueDate])
+  @@map("liabilities")
+}
+
+// ========================== SUBSCRIPTIONS ==========================
+
+model SubscriptionPlan {
+  id           String    @id @default(uuid()) @db.Uuid
+  code         PlanCode  @unique
+  name         String    @db.VarChar(80)
+  description  String?   @db.VarChar(1000)
+  monthlyPrice Decimal   @db.Decimal(14, 2)
+  yearlyPrice  Decimal   @db.Decimal(14, 2)
+  currency     String    @default("INR") @db.VarChar(3)
+  trialDays    Int       @default(0)
+  features     Json
+  limits       Json
+  isActive     Boolean   @default(true)
+  sortOrder    Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Subscription {
+  id           String             @id @default(uuid()) @db.Uuid
+  shopId       String             @db.Uuid
+  shop         Shop               @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  planId       String             @db.Uuid
+  plan         SubscriptionPlan   @relation(fields: [planId], references: [id])
+  status       SubscriptionStatus @default(TRIAL)
+  billingCycle BillingCycle       @default(MONTHLY)
+  startDate    DateTime           @default(now())
+  endDate      DateTime?
+  trialEndsAt  DateTime?
+  amount       Decimal            @default(0) @db.Decimal(14, 2)
+  currency     String             @default("INR") @db.VarChar(3)
+  autoRenew    Boolean            @default(true)
+  cancelledAt  DateTime?
+  cancelReason String?            @db.VarChar(500)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  deletedAt    DateTime?
+
+  @@index([shopId, status])
+  @@index([status, endDate])
+  @@map("subscriptions")
+}
+
+// ============================ REFERRALS ============================
+
+model ReferralCode {
+  id            String     @id @default(uuid()) @db.Uuid
+  shopId        String?    @db.Uuid
+  code          String     @unique @db.VarChar(32)
+  createdByType ActorType?
+  createdById   String?    @db.Uuid
+  status        String     @default("ACTIVE") @db.VarChar(20) // ACTIVE | INACTIVE | EXPIRED
+  maxUses       Int?
+  usedCount     Int        @default(0)
+  rewardAmount  Decimal    @default(0) @db.Decimal(14, 2)
+  expiresAt     DateTime?
+  notes         String?    @db.VarChar(500)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  referrals Referral[]
+
+  @@index([status])
+  @@map("referral_codes")
+}
+
+model Referral {
+  id                String       @id @default(uuid()) @db.Uuid
+  codeId            String       @db.Uuid
+  code              ReferralCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  referrerShopId    String?      @db.Uuid
+  referredShopId    String?      @db.Uuid
+  referredAccountId String?      @db.Uuid
+  status            String       @default("PENDING") @db.VarChar(20) // PENDING | CONVERTED | REWARDED
+  rewardStatus      String       @default("PENDING") @db.VarChar(20) // PENDING | EARNED | PAID
+  rewardAmount      Decimal      @default(0) @db.Decimal(14, 2)
+  convertedAt       DateTime?
+  notes             String?      @db.VarChar(500)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  deletedAt         DateTime?
+
+  @@index([codeId, status])
+  @@index([referrerShopId])
+  @@map("referrals")
+}
+
+model Coupon {
+  id            String    @id @default(uuid()) @db.Uuid
+  shopId        String?   @db.Uuid
+  code          String    @unique @db.VarChar(32)
+  discountType  String    @db.VarChar(10) // PERCENT | FLAT
+  discountValue Decimal   @db.Decimal(14, 2)
+  validFrom     DateTime?
+  validTo       DateTime?
+  usageLimit    Int?
+  usedCount     Int       @default(0)
+  status        String    @default("ACTIVE") @db.VarChar(20) // ACTIVE | INACTIVE | EXPIRED
+  description   String?   @db.VarChar(500)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([status])
+  @@map("coupons")
+}
+
+// ================= NOTIFICATIONS / SMS / SUPPORT / SETTINGS =================
+
+model Notification {
+  id            String     @id @default(uuid()) @db.Uuid
+  shopId        String?    @db.Uuid
+  shop          Shop?      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  recipientType ActorType?
+  recipientId   String?    @db.Uuid
+  title         String     @db.VarChar(200)
+  body          String     @db.VarChar(2000)
+  type          String     @default("INFO") @db.VarChar(20) // INFO | WARNING | ALERT | SYSTEM
+  data          Json?
+  readAt        DateTime?
+  sentAt        DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  smsLogs SmsLog[]
+
+  @@index([recipientType, recipientId, createdAt])
+  @@index([shopId, createdAt])
+  @@map("notifications")
+}
+
+model SmsLog {
+  id             String        @id @default(uuid()) @db.Uuid
+  shopId         String?       @db.Uuid
+  shop           Shop?         @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  notificationId String?       @db.Uuid
+  notification   Notification? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  invoiceId      String?       @db.Uuid
+  customerId     String?       @db.Uuid
+  to             String        @db.VarChar(30)
+  message        String        @db.VarChar(1600)
+  provider       String        @default("console") @db.VarChar(40)
+  status         String        @default("QUEUED") @db.VarChar(20) // QUEUED | SENT | FAILED | DELIVERED
+  sentAt         DateTime?
+  errorMessage   String?       @db.VarChar(500)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  @@index([shopId, createdAt])
+  @@index([status, createdAt])
+  @@map("sms_logs")
+}
+
+model SupportTicket {
+  id                String    @id @default(uuid()) @db.Uuid
+  shopId            String?   @db.Uuid
+  shop              Shop?     @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  accountId         String?   @db.Uuid
+  subject           String    @db.VarChar(200)
+  description       String    @db.VarChar(5000)
+  category          String?   @db.VarChar(80)
+  priority          String    @default("MEDIUM") @db.VarChar(20) // LOW | MEDIUM | HIGH | URGENT
+  status            String    @default("OPEN") @db.VarChar(20) // OPEN | IN_PROGRESS | RESOLVED | CLOSED
+  assignedToAdminId String?   @db.Uuid
+  resolvedAt        DateTime?
+  closedAt          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  replies TicketReply[]
+
+  @@index([status, priority])
+  @@index([shopId])
+  @@map("support_tickets")
+}
+
+model TicketReply {
+  id         String        @id @default(uuid()) @db.Uuid
+  ticketId   String        @db.Uuid
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId   String        @db.Uuid
+  message    String        @db.VarChar(5000)
+  isInternal Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  deletedAt  DateTime?
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_replies")
+}
+
+model PlatformSetting {
+  id               String    @id @default(uuid()) @db.Uuid
+  key              String    @unique @db.VarChar(120)
+  value            Json
+  updatedByAdminId String?   @db.Uuid
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  @@map("platform_settings")
+}
+
+// ============================== AUDIT ==============================
+
+model AuditLog {
+  id         String    @id @default(uuid()) @db.Uuid
+  actorType  ActorType
+  actorId    String    @db.VarChar(80)
+  action     String    @db.VarChar(80)
+  entityType String    @db.VarChar(80)
+  entityId   String?   @db.VarChar(80)
+  shopId     String?   @db.Uuid
+  shop       Shop?     @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  category   String    @default("OPERATIONAL") @db.VarChar(40)
+  severity   String    @default("INFO") @db.VarChar(10) // INFO | MEDIUM | HIGH
+  metadata   Json?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?   @db.VarChar(60)
+  userAgent  String?   @db.VarChar(500)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  @@index([shopId, createdAt])
+  @@index([actorType, actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+  @@index([category, createdAt])
+  @@index([severity, createdAt])
+  @@map("audit_logs")
+}

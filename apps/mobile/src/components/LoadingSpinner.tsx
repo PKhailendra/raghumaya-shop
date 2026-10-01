@@ -1,0 +1,14 @@
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { theme } from '../theme';
+
+export function LoadingSpinner() {
+  return (
+    <View style={styles.container}>
+      <ActivityIndicator size="large" color={theme.colors.primary} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { padding: theme.spacing.xl, alignItems: 'center', justifyContent: 'center' },
+});

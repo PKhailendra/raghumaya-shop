@@ -1,0 +1,48 @@
+# RaghuMayaShop — Render Blueprint
+# Deploy via dashboard: New → Blueprint → connect this repo.
+# Services are created in dependency order: database → api → web.
+
+databases:
+  - name: raghumaya-db
+    databaseName: raghumaya
+    user: raghumaya
+    plan: free
+
+services:
+  # ---- Backend API (Express + Prisma) ----
+  - type: web
+    name: raghumaya-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci --no-audit --no-fund && npm run build --workspace=@raghumaya/shared && npx prisma generate --schema=apps/api/prisma/schema.prisma && npm run build --workspace=raghumaya-api
+    startCommand: npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma && npm start --workspace=raghumaya-api
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: raghumaya-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        sync: false # 64 hex chars — filled at deploy time, never committed
+      - key: CORS_ORIGINS
+        value: https://raghumaya-web.onrender.com
+      - key: API_BASE_URL
+        value: https://raghumaya-api.onrender.com
+
+  # ---- Web dashboard (Next.js) ----
+  - type: web
+    name: raghumaya-web
+    runtime: node
+    plan: free
+    buildCommand: npm ci --no-audit --no-fund && npm run build --workspace=@raghumaya/shared && npm run build --workspace=raghumaya-web
+    startCommand: npm start --workspace=raghumaya-web
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: https://raghumaya-api.onrender.com/api/v1

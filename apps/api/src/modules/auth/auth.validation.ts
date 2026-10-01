@@ -1,0 +1,22 @@
+/** Re-export shared auth schemas for the NestJS-style module layout. */
+export {
+  registerShopOwnerSchema,
+  createShopUserSchema,
+  loginSchema,
+  refreshSchema,
+  logoutSchema,
+  changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  otpRequestSchema,
+  otpVerifySchema,
+  createAdminSchema,
+  updateAdminSchema,
+  verifyCodeSchema,
+  twoFaMethodsSchema,
+  twoFaAuthenticatorVerifySchema,
+  twoFaChallengeSendSchema,
+  twoFaChallengeVerifySchema,
+  profileChangeRequestSchema,
+  paginationSchema,
+} from '@raghumaya/shared';

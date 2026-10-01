@@ -1,0 +1,5617 @@
+openapi: 3.1.0
+info:
+  title: RaghuMayaShop API
+  version: 1.0.0
+  description: >-
+    Multi-tenant SaaS platform API for shop management: auth & 2FA, multi-shop
+    memberships, inventory, ledger-first stock, GST billing, customers, finance,
+    analytics, subscriptions, referrals, notifications, audit, and platform admin.
+    Money is serialized as string; dates are ISO-8601; IDs are UUID v4.
+    List endpoints return { data, meta: { page, limit, total } }.
+    Errors return { error: { code, message } }.
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Local development
+security:
+  - bearerAuth: []
+tags:
+  - name: Health
+  - name: Auth
+  - name: TwoFactor
+  - name: Shops
+  - name: Inventory
+  - name: Stock
+  - name: Purchases
+  - name: Billing
+  - name: Customers
+  - name: Finance
+  - name: Analytics
+  - name: Subscriptions
+  - name: Referrals
+  - name: Notifications
+  - name: AuditLogs
+  - name: Admin
+
+paths:
+  # ---------------------------------------------------------------- Health
+  /health/live:
+    get:
+      tags: [Health]
+      security: []
+      operationId: healthLive
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+  /health/ready:
+    get:
+      tags: [Health]
+      security: []
+      operationId: healthReady
+      summary: Readiness probe (checks database and redis)
+      responses:
+        '200':
+          description: Ready to serve traffic
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  # ---------------------------------------------------------------- Auth
+  /auth/register-shop-owner:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: registerShopOwner
+      summary: Register a new shop and owner account (pending approval)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterShopOwnerRequest'
+      responses:
+        '201':
+          description: Shop and owner created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterShopOwnerResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /auth/shop-users:
+    post:
+      tags: [Auth]
+      operationId: registerShopUser
+      summary: Register a staff account for the active shop (Owner/Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterShopUserRequest'
+      responses:
+        '201':
+          description: Staff account created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      accountId: { type: string, format: uuid }
+                      membershipId: { type: string, format: uuid }
+                      role: { $ref: '#/components/schemas/UserRole' }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: login
+      summary: Password login for shop users and platform admins
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful, or 2FA challenge required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Revoke the current refresh token, or all device tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      revoked: { type: boolean, example: true }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: refreshToken
+      summary: Rotate refresh token and issue a new token pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: New token pair issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      operationId: changePassword
+      summary: Change password and revoke other sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      changed: { type: boolean, example: true }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: forgotPassword
+      summary: Request a password reset (always returns accepted)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '200':
+          description: Accepted (no account enumeration)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      accepted: { type: boolean, example: true }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: resetPassword
+      summary: Reset password using a reset token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      reset: { type: boolean, example: true }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /auth/otp/request:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: requestOtp
+      summary: Send OTP for passwordless login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpRequest'
+      responses:
+        '200':
+          description: OTP sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      sent: { type: boolean, example: true }
+                      channel: { type: string, example: SMS }
+                      expiresIn: { type: integer, example: 600 }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /auth/otp/verify:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: verifyOtp
+      summary: Verify OTP and issue JWT tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpVerifyRequest'
+      responses:
+        '200':
+          description: OTP verified, tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /auth/email/request-verification:
+    post:
+      tags: [Auth]
+      operationId: requestEmailVerification
+      summary: Send email verification code to the authenticated user
+      responses:
+        '200':
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      sent: { type: boolean, example: true }
+  /auth/email/verify:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: verifyEmail
+      summary: Verify email code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, example: '728194' }
+      responses:
+        '200':
+          description: Email verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      verified: { type: boolean, example: true }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /auth/sms/request-verification:
+    post:
+      tags: [Auth]
+      operationId: requestSmsVerification
+      summary: Send SMS verification code to the authenticated user
+      responses:
+        '200':
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      sent: { type: boolean, example: true }
+  /auth/sms/verify:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: verifySms
+      summary: Verify SMS code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, code]
+              properties:
+                phone: { type: string, example: '9999999999' }
+                code: { type: string, example: '551203' }
+      responses:
+        '200':
+          description: Phone verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      verified: { type: boolean, example: true }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /auth/admins:
+    post:
+      tags: [Auth]
+      operationId: createAdmin
+      summary: Create a platform admin account (Super Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdminRequest'
+      responses:
+        '201':
+          description: Admin created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Admin'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /auth/devices:
+    get:
+      tags: [Auth]
+      operationId: listDevices
+      summary: List the actor's devices
+      responses:
+        '200':
+          description: Device list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+  /auth/devices/{id}:
+    delete:
+      tags: [Auth]
+      operationId: removeDevice
+      summary: Remove a device and revoke its refresh tokens
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Device revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      revoked: { type: boolean, example: true }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- 2FA
+  /auth/2fa/status:
+    get:
+      tags: [TwoFactor]
+      operationId: get2faStatus
+      summary: Get 2FA status for the actor
+      responses:
+        '200':
+          description: 2FA status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      enabled: { type: boolean, example: true }
+                      methods: { type: array, items: { type: string }, example: [AUTHENTICATOR, SMS] }
+                      hasBackupCodes: { type: boolean, example: true }
+  /auth/2fa/methods:
+    patch:
+      tags: [TwoFactor]
+      operationId: update2faMethods
+      summary: Update enabled 2FA methods
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [methods]
+              properties:
+                methods: { type: array, items: { type: string, enum: [AUTHENTICATOR, SMS, EMAIL] }, example: [AUTHENTICATOR, EMAIL] }
+      responses:
+        '200':
+          description: Methods updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      methods: { type: array, items: { type: string } }
+  /auth/2fa/authenticator/setup:
+    post:
+      tags: [TwoFactor]
+      operationId: setup2faAuthenticator
+      summary: Start TOTP authenticator setup (returns secret + QR)
+      responses:
+        '200':
+          description: Setup payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      secret: { type: string, example: JBSWY3DPEHPK3PXP }
+                      otpauthUrl: { type: string, example: 'otpauth://totp/RaghuMayaShop:owner@demo.shop?secret=JBSWY3DPEHPK3PXP&issuer=RaghuMayaShop' }
+                      qrDataUrl: { type: string, example: 'data:image/png;base64,…' }
+  /auth/2fa/authenticator/verify:
+    post:
+      tags: [TwoFactor]
+      operationId: verify2faAuthenticator
+      summary: Confirm TOTP setup and enable 2FA (returns backup codes once)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, example: '123456' }
+      responses:
+        '200':
+          description: 2FA enabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      enabled: { type: boolean, example: true }
+                      backupCodes: { type: array, items: { type: string }, example: [a1b2-c3d4, e5f6-g7h8] }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /auth/2fa/backup-codes/regenerate:
+    post:
+      tags: [TwoFactor]
+      operationId: regenerate2faBackupCodes
+      summary: Regenerate backup codes (invalidates old ones)
+      responses:
+        '200':
+          description: New backup codes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      backupCodes: { type: array, items: { type: string } }
+  /auth/2fa/challenge/send:
+    post:
+      tags: [TwoFactor]
+      security: []
+      operationId: send2faChallenge
+      summary: Send a 2FA challenge code (SMS or EMAIL)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeToken, method]
+              properties:
+                challengeToken: { type: string, example: ch_01J9… }
+                method: { type: string, enum: [SMS, EMAIL] }
+      responses:
+        '200':
+          description: Challenge sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      sent: { type: boolean, example: true }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /auth/2fa/challenge/verify:
+    post:
+      tags: [TwoFactor]
+      security: []
+      operationId: verify2faChallenge
+      summary: Verify a 2FA challenge and complete login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeToken, method, code]
+              properties:
+                challengeToken: { type: string, example: ch_01J9… }
+                method: { type: string, enum: [SMS, EMAIL, AUTHENTICATOR, BACKUP_CODE] }
+                code: { type: string, example: '123456' }
+      responses:
+        '200':
+          description: Challenge verified, tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ---------------------------------------------------------------- Shops
+  /shops:
+    post:
+      tags: [Shops]
+      operationId: createShop
+      summary: Create a shop and primary owner membership for the caller
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShopRequest'
+      responses:
+        '201':
+          description: Shop created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Shop'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      tags: [Shops]
+      operationId: listMyShops
+      summary: List shops where the account has an active membership
+      responses:
+        '200':
+          description: Shop list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MyShop'
+  /shops/switch:
+    post:
+      tags: [Shops]
+      operationId: switchShop
+      summary: Switch active shop and re-issue tokens scoped to it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shopId]
+              properties:
+                shopId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: New token pair scoped to the selected shop
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      accessToken: { type: string }
+                      refreshToken: { type: string }
+                      activeShopId: { type: string, format: uuid }
+                      role: { $ref: '#/components/schemas/UserRole' }
+                      permissions: { type: array, items: { type: string } }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /shops/{id}:
+    get:
+      tags: [Shops]
+      operationId: getShop
+      summary: Get shop details (must be a member)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Shop
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Shop'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Shops]
+      operationId: updateShop
+      summary: Update shop profile (SHOP_UPDATE permission)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateShopRequest'
+      responses:
+        '200':
+          description: Shop updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Shop'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /shops/{id}/members:
+    get:
+      tags: [Shops]
+      operationId: listShopMembers
+      summary: List shop memberships (EMPLOYEE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Member list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ShopMembership'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /shops/{id}/members/invite:
+    post:
+      tags: [Shops]
+      operationId: inviteShopMember
+      summary: Invite an employee (EMPLOYEE_CREATE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteMemberRequest'
+      responses:
+        '201':
+          description: Member invited
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ShopMembership'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /shops/{id}/members/{memberId}:
+    patch:
+      tags: [Shops]
+      operationId: updateShopMember
+      summary: Update member role/permissions/status (EMPLOYEE_UPDATE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMemberRequest'
+      responses:
+        '200':
+          description: Member updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ShopMembership'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Shops]
+      operationId: removeShopMember
+      summary: Remove a member (EMPLOYEE_DELETE, soft delete)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Member removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      removed: { type: boolean, example: true }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ---------------------------------------------------------------- Inventory
+  /inventory/categories:
+    post:
+      tags: [Inventory]
+      operationId: createCategory
+      summary: Create a product category (INVENTORY_CREATE)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+      responses:
+        '201':
+          description: Category created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Category'
+    get:
+      tags: [Inventory]
+      operationId: listCategories
+      summary: List categories (INVENTORY_VIEW)
+      parameters:
+        - name: tree
+          in: query
+          schema: { type: boolean, default: false }
+          description: Return nested tree
+      responses:
+        '200':
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+  /inventory/categories/{id}:
+    patch:
+      tags: [Inventory]
+      operationId: updateCategory
+      summary: Update a category (INVENTORY_UPDATE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, example: Groceries }
+                parentId: { type: string, format: uuid, nullable: true }
+                sortOrder: { type: integer, example: 1 }
+      responses:
+        '200':
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Category'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Inventory]
+      operationId: deleteCategory
+      summary: Soft delete a category (INVENTORY_DELETE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Category deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: boolean, example: true }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /inventory/brands:
+    post:
+      tags: [Inventory]
+      operationId: createBrand
+      summary: Create a brand (INVENTORY_CREATE)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, example: Aachi }
+      responses:
+        '201':
+          description: Brand created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Brand'
+    get:
+      tags: [Inventory]
+      operationId: listBrands
+      summary: List brands (INVENTORY_VIEW)
+      responses:
+        '200':
+          description: Brand list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Brand'
+  /inventory/products:
+    post:
+      tags: [Inventory]
+      operationId: createProduct
+      summary: Create a product with images, variants, batches (INVENTORY_CREATE)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Product'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      tags: [Inventory]
+      operationId: listProducts
+      summary: List products with filters and search (INVENTORY_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: categoryId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: brandId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: isActive
+          in: query
+          schema: { type: boolean }
+        - name: lowStock
+          in: query
+          schema: { type: boolean }
+          description: Only products at or below reorder level
+      responses:
+        '200':
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /inventory/products/lookup:
+    get:
+      tags: [Inventory]
+      operationId: lookupProduct
+      summary: Look up a product by barcode or QR code (INVENTORY_VIEW)
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema: { type: string, enum: [barcode, qr] }
+        - name: code
+          in: query
+          required: true
+          schema: { type: string, example: '8900000000012' }
+      responses:
+        '200':
+          description: Product found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /inventory/products/{id}:
+    get:
+      tags: [Inventory]
+      operationId: getProduct
+      summary: Get product details with variants, batches, images
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Product
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Inventory]
+      operationId: updateProduct
+      summary: Update a product (INVENTORY_UPDATE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Inventory]
+      operationId: deleteProduct
+      summary: Soft delete a product (INVENTORY_DELETE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Product deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: boolean, example: true }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- Stock
+  /stock/warehouses:
+    post:
+      tags: [Stock]
+      operationId: createWarehouse
+      summary: Create a warehouse (STOCK_ADJUST)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, example: 'Main Godown' }
+                code: { type: string, example: GD-01 }
+                address: { type: string }
+                isDefault: { type: boolean, default: false }
+      responses:
+        '201':
+          description: Warehouse created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Warehouse'
+    get:
+      tags: [Stock]
+      operationId: listWarehouses
+      summary: List warehouses (STOCK_VIEW)
+      responses:
+        '200':
+          description: Warehouse list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Warehouse'
+  /stock/warehouses/{id}:
+    patch:
+      tags: [Stock]
+      operationId: updateWarehouse
+      summary: Update a warehouse (STOCK_ADJUST)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                code: { type: string }
+                address: { type: string }
+                isDefault: { type: boolean }
+      responses:
+        '200':
+          description: Warehouse updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Warehouse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Stock]
+      operationId: deleteWarehouse
+      summary: Soft delete a warehouse (STOCK_ADJUST)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Warehouse deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: boolean, example: true }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /stock/in:
+    post:
+      tags: [Stock]
+      operationId: stockIn
+      summary: Stock in (STOCK_ADJUST); creates or reuses batch by batchNumber
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockInRequest'
+      responses:
+        '201':
+          description: Stock added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      movements:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StockMovement'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /stock/out:
+    post:
+      tags: [Stock]
+      operationId: stockOut
+      summary: Stock out (STOCK_ADJUST); fails on insufficient stock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockOutRequest'
+      responses:
+        '201':
+          description: Stock removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      movements:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StockMovement'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /stock/transfers:
+    post:
+      tags: [Stock]
+      operationId: createStockTransfer
+      summary: Transfer stock between warehouses (STOCK_ADJUST)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockTransferRequest'
+      responses:
+        '201':
+          description: Transfer completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/StockTransfer'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /stock/purchase-update:
+    post:
+      tags: [Stock]
+      operationId: stockPurchaseUpdate
+      summary: Increase stock from the purchase workflow (STOCK_ADJUST)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockInRequest'
+      responses:
+        '201':
+          description: Purchase stock recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      movements:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StockMovement'
+  /stock/sales-deduction:
+    post:
+      tags: [Stock]
+      operationId: stockSalesDeduction
+      summary: Deduct stock from the sales/order workflow (STOCK_ADJUST)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockOutRequest'
+      responses:
+        '201':
+          description: Sale stock recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      movements:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StockMovement'
+  /stock/levels:
+    get:
+      tags: [Stock]
+      operationId: getStockLevels
+      summary: Current warehouse stock levels (STOCK_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: warehouseId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: productId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: lowStock
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Stock levels
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StockLevel'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /stock/movements:
+    get:
+      tags: [Stock]
+      operationId: listStockMovements
+      summary: Immutable stock movement ledger (STOCK_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: productId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: warehouseId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: type
+          in: query
+          schema: { $ref: '#/components/schemas/StockMovementType' }
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Movement ledger
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StockMovement'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /stock/alerts/low-stock:
+    get:
+      tags: [Stock]
+      operationId: lowStockAlerts
+      summary: Products/variants at or below reorder level (STOCK_VIEW)
+      responses:
+        '200':
+          description: Low stock alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StockAlert'
+  /stock/alerts/out-of-stock:
+    get:
+      tags: [Stock]
+      operationId: outOfStockAlerts
+      summary: Zero-quantity products/variants (STOCK_VIEW)
+      responses:
+        '200':
+          description: Out of stock alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StockAlert'
+  /stock/alerts/expiry:
+    get:
+      tags: [Stock]
+      operationId: expiryAlerts
+      summary: Batches expiring within N days (STOCK_VIEW)
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, default: 30, example: 30 }
+      responses:
+        '200':
+          description: Expiry alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ExpiryAlert'
+  /stock/recalculate:
+    post:
+      tags: [Stock]
+      operationId: recalculateStock
+      summary: Rebuild derived stock levels from the movement ledger (STOCK_ADJUST)
+      responses:
+        '200':
+          description: Recalculation complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      recalculated: { type: boolean, example: true }
+                      productsUpdated: { type: integer, example: 128 }
+
+  # ---------------------------------------------------------------- Purchases
+  /purchases:
+    post:
+      tags: [Purchases]
+      operationId: createPurchase
+      summary: Create a purchase (auto stock-in on receiving; idempotent)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePurchaseRequest'
+      responses:
+        '201':
+          description: Purchase created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Purchase'
+    get:
+      tags: [Purchases]
+      operationId: listPurchases
+      summary: List purchases
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: supplierId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Purchase list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Purchase'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /purchases/{id}:
+    get:
+      tags: [Purchases]
+      operationId: getPurchase
+      summary: Get purchase details with items
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Purchase
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Purchase'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Purchases]
+      operationId: updatePurchase
+      summary: Update purchase header/items before receiving
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePurchaseRequest'
+      responses:
+        '200':
+          description: Purchase updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Purchase'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- Billing
+  /billing/invoices:
+    post:
+      tags: [Billing]
+      operationId: createInvoice
+      summary: Create a GST invoice (INVOICE_CREATE; idempotent)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvoiceRequest'
+      responses:
+        '201':
+          description: Invoice created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Invoice'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      tags: [Billing]
+      operationId: listInvoices
+      summary: List invoices (INVOICE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/InvoiceStatus' }
+        - name: customerId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          schema: { type: string }
+          description: Search invoice number / customer name
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Invoice'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /billing/invoices/{id}:
+    get:
+      tags: [Billing]
+      operationId: getInvoice
+      summary: Get invoice details with items and payments (INVOICE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Invoice
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Invoice'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Billing]
+      operationId: updateInvoice
+      summary: Edit a draft/unpaid invoice (INVOICE_UPDATE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInvoiceRequest'
+      responses:
+        '200':
+          description: Invoice updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Invoice'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /billing/invoices/{id}/pdf:
+    post:
+      tags: [Billing]
+      operationId: generateInvoicePdf
+      summary: Generate the invoice PDF asynchronously (INVOICE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '202':
+          description: PDF generation queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      queued: { type: boolean, example: true }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /billing/invoices/{id}/download:
+    get:
+      tags: [Billing]
+      operationId: downloadInvoicePdf
+      summary: Download the invoice PDF (INVOICE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: PDF file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /billing/invoices/{id}/share:
+    post:
+      tags: [Billing]
+      operationId: shareInvoice
+      summary: Create a shareable invoice link (INVOICE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expiresInDays: { type: integer, default: 7, example: 7 }
+      responses:
+        '201':
+          description: Share link created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      url: { type: string, example: 'https://shop.raghumaya.shop/i/abc123xyz' }
+                      expiresAt: { type: string, format: date-time }
+  /billing/invoices/{id}/sms-link:
+    post:
+      tags: [Billing]
+      operationId: sendInvoiceSmsLink
+      summary: Queue an SMS invoice link (INVOICE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '202':
+          description: SMS queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      queued: { type: boolean, example: true }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /billing/invoices/{id}/whatsapp-link:
+    post:
+      tags: [Billing]
+      operationId: createInvoiceWhatsappLink
+      summary: Create a WhatsApp invoice link (INVOICE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '201':
+          description: WhatsApp link created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      url: { type: string, example: 'https://wa.me/919999999999?text=…' }
+  /billing/payments:
+    post:
+      tags: [Billing]
+      operationId: createPayment
+      summary: Record a payment against an invoice (PAYMENT_CREATE; idempotent)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+      responses:
+        '201':
+          description: Payment recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Payment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      tags: [Billing]
+      operationId: listPayments
+      summary: List payments (PAYMENT_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: invoiceId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: mode
+          in: query
+          schema: { $ref: '#/components/schemas/PaymentMode' }
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Payment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Payment'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  # ---------------------------------------------------------------- Customers
+  /customers:
+    post:
+      tags: [Customers]
+      operationId: createCustomer
+      summary: Create a customer (CUSTOMER_CREATE)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerRequest'
+      responses:
+        '201':
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Customer'
+    get:
+      tags: [Customers]
+      operationId: listCustomers
+      summary: List customers (CUSTOMER_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: hasDue
+          in: query
+          schema: { type: boolean }
+          description: Only customers with outstanding balance
+      responses:
+        '200':
+          description: Customer list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Customer'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /customers/due-payments:
+    get:
+      tags: [Customers]
+      operationId: listDuePayments
+      summary: Customers with unpaid invoices and due totals (CUSTOMER_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Due payment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DuePayment'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /customers/{id}:
+    get:
+      tags: [Customers]
+      operationId: getCustomer
+      summary: Get customer details (CUSTOMER_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Customer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Customer'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Customers]
+      operationId: updateCustomer
+      summary: Update a customer (CUSTOMER_UPDATE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCustomerRequest'
+      responses:
+        '200':
+          description: Customer updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Customer'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Customers]
+      operationId: deleteCustomer
+      summary: Soft delete a customer (CUSTOMER_DELETE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Customer deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: boolean, example: true }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /customers/{id}/history:
+    get:
+      tags: [Customers]
+      operationId: getCustomerHistory
+      summary: Invoice + payment timeline for a customer (CUSTOMER_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Customer history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HistoryEntry'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /customers/{id}/purchases:
+    get:
+      tags: [Customers]
+      operationId: getCustomerPurchases
+      summary: Purchased items across invoices (CUSTOMER_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Purchase history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CustomerPurchase'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /customers/{id}/ledger:
+    get:
+      tags: [Customers]
+      operationId: getCustomerLedger
+      summary: Debit/credit ledger with running balance (CUSTOMER_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Customer ledger
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerLedger'
+  /customers/{id}/reminders:
+    get:
+      tags: [Customers]
+      operationId: listCustomerReminders
+      summary: Reminder history for a customer (CUSTOMER_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Reminder history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CustomerReminder'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /customers/{id}/reminders/sms:
+    post:
+      tags: [Customers]
+      operationId: sendCustomerSmsReminder
+      summary: Queue an SMS due reminder (CUSTOMER_UPDATE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message: { type: string }
+      responses:
+        '202':
+          description: Reminder queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      queued: { type: boolean, example: true }
+                      channel: { type: string, example: SMS }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /customers/{id}/reminders/whatsapp:
+    post:
+      tags: [Customers]
+      operationId: createCustomerWhatsappReminder
+      summary: Create a WhatsApp reminder link (CUSTOMER_UPDATE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '201':
+          description: WhatsApp link created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      url: { type: string, example: 'https://wa.me/919777777777?text=…' }
+
+  # ---------------------------------------------------------------- Finance
+  /finance/categories:
+    post:
+      tags: [Finance]
+      operationId: createFinanceCategory
+      summary: Create an income/expense category (FINANCE_CREATE)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name: { type: string, example: Rent }
+                type: { type: string, enum: [INCOME, EXPENSE] }
+      responses:
+        '201':
+          description: Category created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/FinanceCategory'
+    get:
+      tags: [Finance]
+      operationId: listFinanceCategories
+      summary: List finance categories (FINANCE_VIEW)
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string, enum: [INCOME, EXPENSE] }
+      responses:
+        '200':
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FinanceCategory'
+  /finance/revenues:
+    post:
+      tags: [Finance]
+      operationId: createRevenue
+      summary: Record manual income (FINANCE_CREATE)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRevenueRequest'
+      responses:
+        '201':
+          description: Revenue recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Revenue'
+    get:
+      tags: [Finance]
+      operationId: listRevenues
+      summary: List revenues (FINANCE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: categoryId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Revenue list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Revenue'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /finance/revenues/{id}:
+    patch:
+      tags: [Finance]
+      operationId: updateRevenue
+      summary: Update a revenue entry (FINANCE_UPDATE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRevenueRequest'
+      responses:
+        '200':
+          description: Revenue updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Revenue'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Finance]
+      operationId: deleteRevenue
+      summary: Soft delete a revenue entry (FINANCE_DELETE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Revenue deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: boolean, example: true }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /finance/expenses:
+    post:
+      tags: [Finance]
+      operationId: createExpense
+      summary: Record an expense (FINANCE_CREATE)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExpenseRequest'
+      responses:
+        '201':
+          description: Expense recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Expense'
+    get:
+      tags: [Finance]
+      operationId: listExpenses
+      summary: List expenses (FINANCE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: categoryId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Expense list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Expense'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /finance/expenses/{id}:
+    patch:
+      tags: [Finance]
+      operationId: updateExpense
+      summary: Update an expense (FINANCE_UPDATE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExpenseRequest'
+      responses:
+        '200':
+          description: Expense updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Expense'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Finance]
+      operationId: deleteExpense
+      summary: Soft delete an expense (FINANCE_DELETE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Expense deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: boolean, example: true }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /finance/assets:
+    post:
+      tags: [Finance]
+      operationId: createAsset
+      summary: Add an asset (FINANCE_CREATE)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssetRequest'
+      responses:
+        '201':
+          description: Asset created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Asset'
+    get:
+      tags: [Finance]
+      operationId: listAssets
+      summary: List assets (FINANCE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Asset list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Asset'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /finance/assets/{id}:
+    patch:
+      tags: [Finance]
+      operationId: updateAsset
+      summary: Update an asset (FINANCE_UPDATE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssetRequest'
+      responses:
+        '200':
+          description: Asset updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Asset'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Finance]
+      operationId: deleteAsset
+      summary: Soft delete an asset (FINANCE_DELETE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Asset deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: boolean, example: true }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /finance/liabilities:
+    post:
+      tags: [Finance]
+      operationId: createLiability
+      summary: Add a liability (FINANCE_CREATE)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLiabilityRequest'
+      responses:
+        '201':
+          description: Liability created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Liability'
+    get:
+      tags: [Finance]
+      operationId: listLiabilities
+      summary: List liabilities (FINANCE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Liability list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Liability'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /finance/liabilities/{id}:
+    patch:
+      tags: [Finance]
+      operationId: updateLiability
+      summary: Update a liability (FINANCE_UPDATE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLiabilityRequest'
+      responses:
+        '200':
+          description: Liability updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Liability'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Finance]
+      operationId: deleteLiability
+      summary: Soft delete a liability (FINANCE_DELETE)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Liability deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: boolean, example: true }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /finance/dashboard:
+    get:
+      tags: [Finance]
+      operationId: getFinanceDashboard
+      summary: Finance KPI dashboard (FINANCE_VIEW)
+      responses:
+        '200':
+          description: Finance dashboard metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinanceDashboard'
+  /finance/cash-flow:
+    get:
+      tags: [Finance]
+      operationId: getCashFlow
+      summary: Cash in/out series (FINANCE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Cash flow
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      cashIn: { type: string, example: '430000.00' }
+                      cashOut: { type: string, example: '90000.00' }
+                      netCashFlow: { type: string, example: '340000.00' }
+                      series:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            date: { type: string, example: '2026-09-01' }
+                            in: { type: string, example: '15000.00' }
+                            out: { type: string, example: '4000.00' }
+  /finance/profit-loss:
+    get:
+      tags: [Finance]
+      operationId: getProfitLoss
+      summary: Profit and loss statement (FINANCE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Profit and loss
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      totalRevenue: { type: string, example: '452300.00' }
+                      totalExpenses: { type: string, example: '98000.00' }
+                      netProfit: { type: string, example: '354300.00' }
+  /finance/revenue-analysis:
+    get:
+      tags: [Finance]
+      operationId: getRevenueAnalysis
+      summary: Revenue by source/category (FINANCE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Revenue analysis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      invoiceRevenue: { type: string, example: '440300.00' }
+                      manualRevenue: { type: string, example: '12000.00' }
+                      byCategory:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            category: { type: string, example: Services }
+                            total: { type: string, example: '12000.00' }
+  /finance/reports/monthly:
+    get:
+      tags: [Finance]
+      operationId: getMonthlyFinanceReport
+      summary: Monthly finance report (FINANCE_VIEW)
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema: { type: integer, example: 2026 }
+        - name: month
+          in: query
+          required: true
+          schema: { type: integer, example: 9 }
+      responses:
+        '200':
+          description: Monthly report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinanceDashboard'
+  /finance/reports/yearly:
+    get:
+      tags: [Finance]
+      operationId: getYearlyFinanceReport
+      summary: Yearly finance report (FINANCE_VIEW)
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema: { type: integer, example: 2026 }
+      responses:
+        '200':
+          description: Yearly report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinanceDashboard'
+  /finance/reports/tax:
+    get:
+      tags: [Finance]
+      operationId: getTaxReport
+      summary: Tax report with CGST/SGST/IGST payable (FINANCE_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Tax report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      taxPayable: { type: string, example: '45210.00' }
+                      cgst: { type: string, example: '21000.00' }
+                      sgst: { type: string, example: '21000.00' }
+                      igst: { type: string, example: '3210.00' }
+
+  # ---------------------------------------------------------------- Analytics
+  /analytics/dashboard:
+    get:
+      tags: [Analytics]
+      operationId: getAnalyticsDashboard
+      summary: Widget-ready analytics dashboard (ANALYTICS_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Dashboard widgets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      widgets:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            key: { type: string, example: dailySales }
+                            title: { type: string, example: 'Daily Sales' }
+                            type: { type: string, example: line }
+                            data: {}
+  /analytics/sales/daily:
+    get:
+      tags: [Analytics]
+      operationId: getDailySales
+      summary: Daily sales series (ANALYTICS_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Daily sales
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesSeries'
+  /analytics/sales/weekly:
+    get:
+      tags: [Analytics]
+      operationId: getWeeklySales
+      summary: Weekly sales series (ANALYTICS_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Weekly sales
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesSeries'
+  /analytics/sales/monthly:
+    get:
+      tags: [Analytics]
+      operationId: getMonthlySales
+      summary: Monthly sales series (ANALYTICS_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Monthly sales
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesSeries'
+  /analytics/top-products:
+    get:
+      tags: [Analytics]
+      operationId: getTopProducts
+      summary: Top products by quantity and revenue (ANALYTICS_VIEW)
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10, maximum: 100 }
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Top products
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId: { type: string, format: uuid }
+                        productName: { type: string, example: 'Premium Rice 25kg' }
+                        quantity: { type: string, example: '120' }
+                        revenue: { type: string, example: '150000.00' }
+  /analytics/top-customers:
+    get:
+      tags: [Analytics]
+      operationId: getTopCustomers
+      summary: Top customers by invoice total (ANALYTICS_VIEW)
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10, maximum: 100 }
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Top customers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        customerId: { type: string, format: uuid }
+                        customerName: { type: string, example: 'Suresh Kumar' }
+                        total: { type: string, example: '84200.00' }
+  /analytics/revenue-growth:
+    get:
+      tags: [Analytics]
+      operationId: getRevenueGrowth
+      summary: Revenue growth vs previous equal-length period (ANALYTICS_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Revenue growth
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      current: { type: string, example: '452300.00' }
+                      previous: { type: string, example: '410000.00' }
+                      growthPercent: { type: string, example: '10.32' }
+  /analytics/profit-margin:
+    get:
+      tags: [Analytics]
+      operationId: getProfitMargin
+      summary: Profit margin = invoice revenue minus expenses (ANALYTICS_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Profit margin
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      revenue: { type: string, example: '440300.00' }
+                      expenses: { type: string, example: '98000.00' }
+                      margin: { type: string, example: '342300.00' }
+                      marginPercent: { type: string, example: '77.74' }
+  /analytics/inventory-value:
+    get:
+      tags: [Analytics]
+      operationId: getInventoryValue
+      summary: Inventory value at purchase and selling prices (ANALYTICS_VIEW)
+      responses:
+        '200':
+          description: Inventory value
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      atPurchasePrice: { type: string, example: '1250000.00' }
+                      atSellingPrice: { type: string, example: '1520000.00' }
+                      productCount: { type: integer, example: 25 }
+  /analytics/outstanding-payments:
+    get:
+      tags: [Analytics]
+      operationId: getOutstandingPayments
+      summary: Unpaid / partially-paid invoices (ANALYTICS_VIEW)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Outstanding payments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        invoiceId: { type: string, format: uuid }
+                        invoiceNumber: { type: string, example: INV-2026-0042 }
+                        customerName: { type: string }
+                        outstanding: { type: string, example: '2493.76' }
+                        dueDate: { type: string, format: date }
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /analytics/assets:
+    get:
+      tags: [Analytics]
+      operationId: getAssetsAnalytics
+      summary: Assets grouped by type/status (ANALYTICS_VIEW)
+      responses:
+        '200':
+          description: Asset analytics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      totalValue: { type: string, example: '850000.00' }
+                      byType:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            type: { type: string, example: Equipment }
+                            value: { type: string, example: '500000.00' }
+  /analytics/liabilities:
+    get:
+      tags: [Analytics]
+      operationId: getLiabilitiesAnalytics
+      summary: Liabilities grouped by type/status (ANALYTICS_VIEW)
+      responses:
+        '200':
+          description: Liability analytics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      totalOutstanding: { type: string, example: '120000.00' }
+                      byType:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            type: { type: string, example: Loan }
+                            outstanding: { type: string, example: '120000.00' }
+
+  # ---------------------------------------------------------------- Subscriptions
+  /subscriptions/plans:
+    get:
+      tags: [Subscriptions]
+      security: []
+      operationId: listPlans
+      summary: List active subscription plans
+      responses:
+        '200':
+          description: Plan list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubscriptionPlan'
+  /subscriptions/current:
+    get:
+      tags: [Subscriptions]
+      operationId: getCurrentSubscription
+      summary: Current subscription with usage vs limits (Owner/Manager)
+      responses:
+        '200':
+          description: Current subscription
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentSubscription'
+  /subscriptions/history:
+    get:
+      tags: [Subscriptions]
+      operationId: getSubscriptionHistory
+      summary: Subscription periods history (Owner/Manager)
+      responses:
+        '200':
+          description: Subscription history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Subscription'
+  /subscriptions/limits:
+    get:
+      tags: [Subscriptions]
+      operationId: getSubscriptionLimits
+      summary: Current plan limits with usage (Owner/Manager)
+      responses:
+        '200':
+          description: Limits and usage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      limits:
+                        type: object
+                        properties:
+                          users: { type: integer, example: 15 }
+                          products: { type: integer, example: 5000 }
+                          customers: { type: integer, example: 10000 }
+                          invoicesPerMonth: { type: integer, example: 5000 }
+                          storageMb: { type: integer, example: 10240 }
+                      usage:
+                        type: object
+                        properties:
+                          users: { type: integer, example: 4 }
+                          products: { type: integer, example: 25 }
+                          customers: { type: integer, example: 10 }
+                          invoicesThisMonth: { type: integer, example: 15 }
+  /subscriptions/features/{feature}:
+    get:
+      tags: [Subscriptions]
+      operationId: checkSubscriptionFeature
+      summary: Check whether a feature is allowed on the current plan
+      parameters:
+        - name: feature
+          in: path
+          required: true
+          schema: { type: string, example: bulk_invoice_pdf }
+      responses:
+        '200':
+          description: Feature check
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      feature: { type: string, example: bulk_invoice_pdf }
+                      allowed: { type: boolean, example: true }
+  /subscriptions/change:
+    post:
+      tags: [Subscriptions]
+      operationId: changeSubscription
+      summary: Change plan (Owner; idempotent)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeSubscriptionRequest'
+      responses:
+        '200':
+          description: Subscription changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+        '409':
+          description: Downgrade blocked — usage exceeds target plan limits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /subscriptions/cancel:
+    post:
+      tags: [Subscriptions]
+      operationId: cancelSubscription
+      summary: Cancel subscription (runs to end of current period; Owner)
+      responses:
+        '200':
+          description: Subscription cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+  /subscriptions/admin/shops/{shopId}/assign:
+    post:
+      tags: [Subscriptions]
+      operationId: adminAssignSubscription
+      summary: Admin assigns a plan to a shop (subscriptions.assign)
+      parameters:
+        - name: shopId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planCode]
+              properties:
+                planCode: { $ref: '#/components/schemas/PlanCode' }
+                billingCycle: { type: string, enum: [MONTHLY, YEARLY], default: MONTHLY }
+      responses:
+        '200':
+          description: Plan assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ---------------------------------------------------------------- Referrals
+  /referrals/validate/{code}:
+    get:
+      tags: [Referrals]
+      security: []
+      operationId: validateReferralCode
+      summary: Validate a referral code
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string, example: RMS-ABCD1234 }
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      valid: { type: boolean, example: true }
+                      code: { type: string, example: RMS-ABCD1234 }
+  /referrals/track:
+    post:
+      tags: [Referrals]
+      security: []
+      operationId: trackReferral
+      summary: Track a referral click or signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, example: RMS-ABCD1234 }
+                phone: { type: string, example: '9888888888' }
+      responses:
+        '201':
+          description: Referral tracked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Referral'
+  /referrals/dashboard:
+    get:
+      tags: [Referrals]
+      operationId: getReferralDashboard
+      summary: Referral dashboard widgets
+      responses:
+        '200':
+          description: Referral widgets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      totalReferrals: { type: integer, example: 42 }
+                      totalRewards: { type: string, example: '21000.00' }
+                      byStatus:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            status: { type: string, example: CONVERTED }
+                            count: { type: integer, example: 30 }
+                      couponsByStatus:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            status: { type: string, example: ACTIVE }
+                            count: { type: integer, example: 12 }
+  /referrals:
+    get:
+      tags: [Referrals]
+      operationId: listReferrals
+      summary: List referrals for the shop
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Referral list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Referral'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /referrals/codes:
+    get:
+      tags: [Referrals]
+      operationId: listReferralCodes
+      summary: List the shop's referral codes
+      responses:
+        '200':
+          description: Code list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReferralCode'
+    post:
+      tags: [Referrals]
+      operationId: createReferralCode
+      summary: Create a referral code (auto-generated if omitted)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string, example: RMS-MAYA2026 }
+      responses:
+        '201':
+          description: Code created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ReferralCode'
+  /referrals/{id}/reward:
+    post:
+      tags: [Referrals]
+      operationId: rewardReferral
+      summary: Mark a referral reward as paid (Owner)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rewardAmount]
+              properties:
+                rewardAmount: { type: string, example: '500.00' }
+                note: { type: string }
+      responses:
+        '200':
+          description: Reward recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Referral'
+  /referrals/coupons:
+    get:
+      tags: [Referrals]
+      operationId: listCoupons
+      summary: List coupons
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Coupon list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Coupon'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+    post:
+      tags: [Referrals]
+      operationId: createCoupon
+      summary: Create a coupon (Owner/Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCouponRequest'
+      responses:
+        '201':
+          description: Coupon created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Coupon'
+
+  # ---------------------------------------------------------------- Notifications
+  /notifications:
+    get:
+      tags: [Notifications]
+      operationId: listNotifications
+      summary: List in-app notifications
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: unreadOnly
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      operationId: markNotificationRead
+      summary: Mark a notification as read
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Marked read
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      read: { type: boolean, example: true }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /notifications/{id}/retry:
+    post:
+      tags: [Notifications]
+      operationId: retryNotification
+      summary: Retry a failed notification delivery (platform admin)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '202':
+          description: Retry queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      queued: { type: boolean, example: true }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ---------------------------------------------------------------- Audit logs
+  /audit-logs:
+    get:
+      tags: [AuditLogs]
+      operationId: searchAuditLogs
+      summary: Search audit logs (shop users see only their shop)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: entityType
+          in: query
+          schema: { type: string }
+        - name: entityId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: severity
+          in: query
+          schema: { type: string, enum: [INFO, MEDIUM, HIGH] }
+        - name: actorType
+          in: query
+          schema: { type: string, enum: [ADMIN, SHOP_USER] }
+        - name: actorId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: ipAddress
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Audit log search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+  /audit-logs/dashboard:
+    get:
+      tags: [AuditLogs]
+      operationId: getAuditDashboard
+      summary: Audit risk dashboard (totals, by category/severity, top actions)
+      responses:
+        '200':
+          description: Audit dashboard
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      totalLogs: { type: integer, example: 12840 }
+                      authEvents: { type: integer, example: 3200 }
+                      byCategory:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            category: { type: string, example: billing }
+                            count: { type: integer, example: 5400 }
+                      bySeverity:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            severity: { type: string, example: HIGH }
+                            count: { type: integer, example: 42 }
+                      topActions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            action: { type: string, example: INVOICE_CREATED }
+                            count: { type: integer, example: 900 }
+
+  # ---------------------------------------------------------------- Platform admin
+  /admin/dashboard:
+    get:
+      tags: [Admin]
+      operationId: adminDashboard
+      summary: Platform KPI dashboard (dashboard.read)
+      responses:
+        '200':
+          description: Platform metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminDashboard'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/shops:
+    get:
+      tags: [Admin]
+      operationId: adminListShops
+      summary: List/filter shops (shops.read)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Shop list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Shop'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin]
+      operationId: adminCreateShop
+      summary: Create shop wizard backend — shop + owner + temp password + subscription (shops.create)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateShopRequest'
+      responses:
+        '201':
+          description: Shop created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      shopId: { type: string, format: uuid }
+                      ownerAccountId: { type: string, format: uuid }
+                      temporaryPassword: { type: string, example: 'Tmp#4821' }
+                      subscriptionId: { type: string, format: uuid }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/shops/{shopId}:
+    get:
+      tags: [Admin]
+      operationId: adminGetShop
+      summary: Get shop details (shops.read)
+      parameters:
+        - name: shopId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Shop
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Shop'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Admin]
+      operationId: adminUpdateShop
+      summary: Edit shop (shops.update)
+      parameters:
+        - name: shopId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateShopRequest'
+      responses:
+        '200':
+          description: Shop updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Shop'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Admin]
+      operationId: adminDeleteShop
+      summary: Soft delete a shop (Super Admin; shops.delete)
+      parameters:
+        - name: shopId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Shop deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: boolean, example: true }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/shops/{shopId}/suspend:
+    post:
+      tags: [Admin]
+      operationId: adminSuspendShop
+      summary: Suspend a shop (shops.suspend)
+      parameters:
+        - name: shopId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, example: 'Payment overdue' }
+      responses:
+        '200':
+          description: Shop suspended
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Shop'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/shops/{shopId}/block:
+    post:
+      tags: [Admin]
+      operationId: adminBlockShop
+      summary: Block a shop (shops.block)
+      parameters:
+        - name: shopId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, example: 'Policy violation' }
+      responses:
+        '200':
+          description: Shop blocked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Shop'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/shops/{shopId}/activate:
+    post:
+      tags: [Admin]
+      operationId: adminActivateShop
+      summary: Activate a suspended/blocked shop (shops.activate)
+      parameters:
+        - name: shopId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Shop activated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Shop'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/shops/{shopId}/analytics:
+    get:
+      tags: [Admin]
+      operationId: adminShopAnalytics
+      summary: Analytics for one shop (shops.read)
+      parameters:
+        - name: shopId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Shop analytics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      revenue: { type: string, example: '452300.00' }
+                      invoiceCount: { type: integer, example: 340 }
+                      productCount: { type: integer, example: 25 }
+                      customerCount: { type: integer, example: 10 }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/users:
+    get:
+      tags: [Admin]
+      operationId: adminListUsers
+      summary: List users (users.read)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: role
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Account'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/users/{userId}:
+    patch:
+      tags: [Admin]
+      operationId: adminUpdateUser
+      summary: Update a user (users.update)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fullName: { type: string }
+                status: { $ref: '#/components/schemas/AccountStatus' }
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Account'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/users/{userId}/reset-password:
+    post:
+      tags: [Admin]
+      operationId: adminResetUserPassword
+      summary: Admin password reset — temp password sent via SMS/email (users.reset_password)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      temporaryPassword: { type: string, example: 'Tmp#9910' }
+                      sentVia: { type: array, items: { type: string }, example: [SMS, EMAIL] }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/subscriptions:
+    get:
+      tags: [Admin]
+      operationId: adminListSubscriptions
+      summary: List subscriptions (subscriptions.read)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/SubscriptionStatus' }
+        - name: planCode
+          in: query
+          schema: { $ref: '#/components/schemas/PlanCode' }
+      responses:
+        '200':
+          description: Subscription list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Subscription'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/subscriptions/assign:
+    post:
+      tags: [Admin]
+      operationId: adminAssignSubscription
+      summary: Assign a plan to a shop (subscriptions.assign)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shopId, planCode]
+              properties:
+                shopId: { type: string, format: uuid }
+                planCode: { $ref: '#/components/schemas/PlanCode' }
+                billingCycle: { type: string, enum: [MONTHLY, YEARLY], default: MONTHLY }
+      responses:
+        '200':
+          description: Plan assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/approvals:
+    get:
+      tags: [Admin]
+      operationId: adminListApprovals
+      summary: List approval requests (approvals.read)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: type
+          in: query
+          schema: { type: string, enum: [PROFILE_CHANGE, SUBSCRIPTION_CHANGE, SHOP_ACTIVATION, DELETE_REQUEST] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [PENDING, APPROVED, REJECTED, MODIFICATION_REQUESTED], default: PENDING }
+      responses:
+        '200':
+          description: Approval queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApprovalRequest'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/approvals/{id}/approve:
+    post:
+      tags: [Admin]
+      operationId: adminApproveRequest
+      summary: Approve an approval request (approvals.approve)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reviewerComment: { type: string }
+      responses:
+        '200':
+          description: Request approved and applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ApprovalRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/approvals/{id}/reject:
+    post:
+      tags: [Admin]
+      operationId: adminRejectRequest
+      summary: Reject an approval request (approvals.reject)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, example: 'GST number does not match records' }
+      responses:
+        '200':
+          description: Request rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ApprovalRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/support/tickets:
+    get:
+      tags: [Admin]
+      operationId: adminListTickets
+      summary: List support tickets (support.read)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema: { type: string, enum: [OPEN, ASSIGNED, WAITING_ON_CUSTOMER, RESOLVED, CLOSED] }
+        - name: priority
+          in: query
+          schema: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Ticket queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SupportTicket'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin]
+      operationId: adminCreateTicket
+      summary: Create a support ticket (support.create)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTicketRequest'
+      responses:
+        '201':
+          description: Ticket created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SupportTicket'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/support/tickets/{ticketId}:
+    patch:
+      tags: [Admin]
+      operationId: adminUpdateTicket
+      summary: Update a ticket (support.assign)
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTicketRequest'
+      responses:
+        '200':
+          description: Ticket updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SupportTicket'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/support/tickets/{ticketId}/assign:
+    post:
+      tags: [Admin]
+      operationId: adminAssignTicket
+      summary: Assign a ticket (support.assign)
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignedToId]
+              properties:
+                assignedToId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Ticket assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SupportTicket'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/support/tickets/{ticketId}/resolve:
+    post:
+      tags: [Admin]
+      operationId: adminResolveTicket
+      summary: Resolve a ticket (support.resolve)
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolution]
+              properties:
+                resolution: { type: string, example: 'Stock sync issue fixed; invoice regenerated.' }
+      responses:
+        '200':
+          description: Ticket resolved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SupportTicket'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/support/tickets/{ticketId}/close:
+    post:
+      tags: [Admin]
+      operationId: adminCloseTicket
+      summary: Close a ticket (support.close)
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Ticket closed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SupportTicket'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/reports/{type}:
+    get:
+      tags: [Admin]
+      operationId: adminGetReport
+      summary: Run a platform report — shops, revenue, users, subscriptions, audit (reports.read)
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema: { type: string, enum: [shops, revenue, users, subscriptions, audit] }
+        - name: format
+          in: query
+          schema: { type: string, enum: [pdf, xlsx, csv], default: csv }
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Report file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/reports/exports:
+    post:
+      tags: [Admin]
+      operationId: adminCreateExport
+      summary: Queue an async report export job (reports.export)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reportType, format]
+              properties:
+                reportType: { type: string, example: revenue }
+                format: { type: string, enum: [PDF, EXCEL, CSV] }
+                filters:
+                  type: object
+                  properties:
+                    fromDate: { type: string, format: date }
+                    toDate: { type: string, format: date }
+      responses:
+        '202':
+          description: Export job queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      jobId: { type: string, format: uuid }
+                      status: { type: string, example: QUEUED }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/reports/exports/{jobId}:
+    get:
+      tags: [Admin]
+      operationId: adminGetExportJob
+      summary: Get export job status and download URL (reports.read)
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Export job
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      jobId: { type: string, format: uuid }
+                      status: { type: string, example: COMPLETED }
+                      fileUrl: { type: string, example: 'https://s3…/exports/revenue-2026-09.csv?expires=…' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /admin/settings:
+    get:
+      tags: [Admin]
+      operationId: adminGetSettings
+      summary: Read platform settings (settings.read)
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { type: string, example: sms.provider }
+                        value: {}
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags: [Admin]
+      operationId: adminUpdateSettings
+      summary: Update a platform setting (Super Admin; settings.update)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, value]
+              properties:
+                key: { type: string, example: sms.provider }
+                value: { example: msg91 }
+      responses:
+        '200':
+          description: Setting updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      key: { type: string, example: sms.provider }
+                      value: { example: msg91 }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/security/login-history:
+    get:
+      tags: [Admin]
+      operationId: adminLoginHistory
+      summary: Admin login attempts (login_history.read)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: email
+          in: query
+          schema: { type: string }
+        - name: adminId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: success
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Login history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LoginHistoryEntry'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/security/devices:
+    get:
+      tags: [Admin]
+      operationId: adminListDevices
+      summary: Admin device inventory (devices.manage)
+      parameters:
+        - name: adminId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Device list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived JWT access token (15 min). Obtain via POST /auth/login or /auth/refresh.
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, default: 1, minimum: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+    FromDate:
+      name: fromDate
+      in: query
+      schema: { type: string, format: date, example: '2026-09-01' }
+    ToDate:
+      name: toDate
+      in: query
+      schema: { type: string, format: date, example: '2026-09-30' }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, format: uuid }
+      description: Honored on POST /billing/invoices, /billing/payments, /purchases, /subscriptions/change. Retries with the same key return the original response.
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing or invalid access token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Authenticated but lacking the required role/permission
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Conflict (duplicate unique key, insufficient stock, downgrade blocked)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServiceUnavailable:
+      description: Dependency (database/redis) unavailable
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: VALIDATION_ERROR }
+            message: { type: string, example: 'quantity must be a positive number' }
+    PaginationMeta:
+      type: object
+      properties:
+        page: { type: integer, example: 1 }
+        limit: { type: integer, example: 20 }
+        total: { type: integer, example: 128 }
+    HealthStatus:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+        checks:
+          type: object
+          properties:
+            database: { type: string, example: ok }
+            redis: { type: string, example: ok }
+    AccountStatus:
+      type: string
+      enum: [ACTIVE, PENDING, SUSPENDED, BLOCKED]
+    UserRole:
+      type: string
+      enum: [OWNER, MANAGER, CASHIER, ACCOUNTANT, INVENTORY_STAFF, STAFF]
+    AdminRole:
+      type: string
+      enum: [SUPER_ADMIN, ADMIN, SUPPORT_EXECUTIVE, FINANCE_MANAGER, READ_ONLY_AUDITOR]
+    InvoiceStatus:
+      type: string
+      enum: [DRAFT, ISSUED, PARTIALLY_PAID, PAID, OVERDUE, CANCELLED]
+    PaymentMode:
+      type: string
+      enum: [CASH, UPI, CARD, BANK_TRANSFER, CHEQUE]
+    StockMovementType:
+      type: string
+      enum: [IN, OUT, TRANSFER_IN, TRANSFER_OUT, ADJUSTMENT, PURCHASE, SALE]
+    SubscriptionStatus:
+      type: string
+      enum: [TRIAL, ACTIVE, CANCELLED, EXPIRED]
+    PlanCode:
+      type: string
+      enum: [FREE, STARTER, PROFESSIONAL, ENTERPRISE]
+
+    # ---- Auth ----
+    RegisterShopOwnerRequest:
+      type: object
+      required: [shopName, fullName, phone, password]
+      properties:
+        shopName: { type: string, example: 'Raghu Maya General Store' }
+        fullName: { type: string, example: 'Raghu Prasad' }
+        phone: { type: string, example: '9999999999' }
+        email: { type: string, format: email, example: owner@demo.shop }
+        password: { type: string, format: password, example: 'Owner@123' }
+        gstNumber: { type: string, example: 33AAAAA0000A1Z5 }
+        city: { type: string, example: Chennai }
+        state: { type: string, example: 'Tamil Nadu' }
+        referralCode: { type: string, example: RMS-ABCD1234 }
+    RegisterShopOwnerResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            accountId: { type: string, format: uuid }
+            shopId: { type: string, format: uuid }
+            accessToken: { type: string }
+            refreshToken: { type: string }
+            activeShopId: { type: string, format: uuid }
+            shops:
+              type: array
+              items: { $ref: '#/components/schemas/MyShop' }
+    RegisterShopUserRequest:
+      type: object
+      required: [fullName, phone, password, role]
+      properties:
+        fullName: { type: string, example: 'Cashier User' }
+        phone: { type: string, example: '9999999998' }
+        email: { type: string, format: email }
+        password: { type: string, format: password, example: 'Cashier@123' }
+        role: { $ref: '#/components/schemas/UserRole' }
+    LoginRequest:
+      type: object
+      required: [emailOrPhone, password]
+      properties:
+        emailOrPhone: { type: string, example: owner@demo.shop }
+        password: { type: string, format: password, example: 'Owner@123' }
+    LoginResponse:
+      type: object
+      properties:
+        data:
+          oneOf:
+            - type: object
+              title: LoginSuccess
+              properties:
+                accessToken: { type: string }
+                refreshToken: { type: string }
+                activeShopId: { type: string, format: uuid }
+                actorType: { type: string, example: SHOP_USER }
+                shops:
+                  type: array
+                  items: { $ref: '#/components/schemas/MyShop' }
+            - type: object
+              title: TwoFactorChallenge
+              properties:
+                twoFactorRequired: { type: boolean, example: true }
+                challengeToken: { type: string, example: ch_01J9… }
+                methods: { type: array, items: { type: string }, example: [AUTHENTICATOR, SMS] }
+                expiresAt: { type: string, format: date-time }
+    TokenPair:
+      type: object
+      properties:
+        data:
+          type: object
+          required: [accessToken, refreshToken]
+          properties:
+            accessToken: { type: string }
+            refreshToken: { type: string }
+    LogoutRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+        allDevices: { type: boolean, default: false }
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, format: password }
+        newPassword: { type: string, format: password, example: 'NewOwner@456' }
+    ForgotPasswordRequest:
+      type: object
+      required: [emailOrPhone]
+      properties:
+        emailOrPhone: { type: string, example: owner@demo.shop }
+    ResetPasswordRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string }
+        newPassword: { type: string, format: password, example: 'Reset@789' }
+    OtpRequest:
+      type: object
+      required: [emailOrPhone]
+      properties:
+        emailOrPhone: { type: string, example: '9999999999' }
+        channel: { type: string, enum: [SMS, EMAIL], default: SMS }
+    OtpVerifyRequest:
+      type: object
+      required: [emailOrPhone, code]
+      properties:
+        emailOrPhone: { type: string, example: '9999999999' }
+        code: { type: string, example: '483920' }
+    CreateAdminRequest:
+      type: object
+      required: [fullName, email, password, role]
+      properties:
+        fullName: { type: string, example: 'Support Lead' }
+        email: { type: string, format: email, example: support@raghumaya.shop }
+        password: { type: string, format: password, example: 'Support@123' }
+        role: { $ref: '#/components/schemas/AdminRole' }
+    Device:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        deviceName: { type: string, example: "Prasad's Phone" }
+        deviceType: { type: string, example: mobile }
+        platform: { type: string, example: Android }
+        lastUsedAt: { type: string, format: date-time, nullable: true }
+        verifiedAt: { type: string, format: date-time, nullable: true }
+        revokedAt: { type: string, format: date-time, nullable: true }
+
+    # ---- Shops ----
+    Shop:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: 'Raghu Maya General Store' }
+        legalName: { type: string, nullable: true }
+        gstNumber: { type: string, nullable: true, example: 33AAAAA0000A1Z5 }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        addressLine1: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        state: { type: string, nullable: true }
+        postalCode: { type: string, nullable: true }
+        country: { type: string, example: India }
+        status: { type: string, example: ACTIVE }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    MyShop:
+      type: object
+      properties:
+        shopId: { type: string, format: uuid }
+        shopName: { type: string, example: 'Raghu Maya General Store' }
+        role: { $ref: '#/components/schemas/UserRole' }
+        status: { type: string, example: ACTIVE }
+        isPrimaryOwner: { type: boolean, example: true }
+        permissions: { type: array, items: { type: string }, example: ['*'] }
+    CreateShopRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 180, example: 'Maya Fashion' }
+        legalName: { type: string }
+        gstNumber: { type: string }
+        phone: { type: string }
+        email: { type: string, format: email }
+        addressLine1: { type: string }
+        addressLine2: { type: string }
+        city: { type: string }
+        state: { type: string }
+        postalCode: { type: string }
+        country: { type: string, default: India }
+    UpdateShopRequest:
+      type: object
+      properties:
+        name: { type: string }
+        legalName: { type: string }
+        gstNumber: { type: string }
+        phone: { type: string }
+        email: { type: string, format: email }
+        addressLine1: { type: string }
+        city: { type: string }
+        state: { type: string }
+        postalCode: { type: string }
+    ShopMembership:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        shopId: { type: string, format: uuid }
+        accountId: { type: string, format: uuid }
+        fullName: { type: string, example: 'Cashier User' }
+        role: { $ref: '#/components/schemas/UserRole' }
+        status: { type: string, example: ACTIVE }
+        isPrimaryOwner: { type: boolean }
+        permissions: { type: array, items: { type: string }, nullable: true }
+        invitedById: { type: string, format: uuid, nullable: true }
+        joinedAt: { type: string, format: date-time, nullable: true }
+        lastAccessedAt: { type: string, format: date-time, nullable: true }
+    InviteMemberRequest:
+      type: object
+      required: [fullName, phone, role]
+      properties:
+        fullName: { type: string, example: 'Cashier User' }
+        phone: { type: string, example: '9999999998' }
+        email: { type: string, format: email }
+        role: { $ref: '#/components/schemas/UserRole' }
+        permissions: { type: array, items: { type: string }, example: [CUSTOMER_VIEW, ORDER_CREATE, INVOICE_CREATE] }
+    UpdateMemberRequest:
+      type: object
+      properties:
+        role: { $ref: '#/components/schemas/UserRole' }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, BLOCKED] }
+        permissions: { type: array, items: { type: string } }
+
+    # ---- Inventory ----
+    Category:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        shopId: { type: string, format: uuid }
+        name: { type: string, example: Groceries }
+        parentId: { type: string, format: uuid, nullable: true }
+        sortOrder: { type: integer, example: 0 }
+        children:
+          type: array
+          items: { $ref: '#/components/schemas/Category' }
+    CreateCategoryRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: Groceries }
+        parentId: { type: string, format: uuid, nullable: true }
+        sortOrder: { type: integer, default: 0 }
+    Brand:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        shopId: { type: string, format: uuid }
+        name: { type: string, example: Aachi }
+    ProductImage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string, example: 'https://example.com/rice-front.jpg' }
+        isPrimary: { type: boolean, example: true }
+        sortOrder: { type: integer, example: 0 }
+    ProductVariant:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: 10kg }
+        sku: { type: string, example: RICE-10KG }
+        barcode: { type: string, nullable: true }
+        qrCode: { type: string, nullable: true }
+        attributes: { type: object, example: { weight: 10kg } }
+        purchasePrice: { type: string, nullable: true, example: '450.00' }
+        sellingPrice: { type: string, nullable: true, example: '520.00' }
+        currentStock: { type: string, example: '0' }
+    ProductBatch:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        batchNumber: { type: string, example: BATCH-JUN-2026 }
+        manufacturedDate: { type: string, format: date, nullable: true }
+        expiryDate: { type: string, format: date, nullable: true, example: '2026-12-31' }
+        quantity: { type: string, example: '40' }
+        purchasePrice: { type: string, example: '1100.00' }
+    Product:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        shopId: { type: string, format: uuid }
+        categoryId: { type: string, format: uuid, nullable: true }
+        brandId: { type: string, format: uuid, nullable: true }
+        name: { type: string, example: 'Premium Rice 25kg' }
+        sku: { type: string, example: RICE-25KG }
+        barcode: { type: string, nullable: true, example: '8900000000012' }
+        qrCode: { type: string, nullable: true, example: 'RMS:RICE-25KG' }
+        description: { type: string, nullable: true }
+        unit: { type: string, example: bag }
+        purchasePrice: { type: string, example: '1100.00' }
+        sellingPrice: { type: string, example: '1250.00' }
+        taxRate: { type: string, example: '5.00' }
+        currentStock: { type: string, example: '40' }
+        reorderLevel: { type: string, example: '10' }
+        imageUrl: { type: string, nullable: true }
+        isActive: { type: boolean, example: true }
+        images: { type: array, items: { $ref: '#/components/schemas/ProductImage' } }
+        variants: { type: array, items: { $ref: '#/components/schemas/ProductVariant' } }
+        batches: { type: array, items: { $ref: '#/components/schemas/ProductBatch' } }
+    CreateProductRequest:
+      type: object
+      required: [name, unit, purchasePrice, sellingPrice]
+      properties:
+        categoryId: { type: string, format: uuid }
+        brandId: { type: string, format: uuid }
+        name: { type: string, example: 'Premium Rice 25kg' }
+        sku: { type: string, example: RICE-25KG }
+        barcode: { type: string, example: '8900000000012' }
+        qrCode: { type: string, example: 'RMS:RICE-25KG' }
+        description: { type: string }
+        unit: { type: string, example: bag }
+        purchasePrice: { type: string, example: '1100.00' }
+        sellingPrice: { type: string, example: '1250.00' }
+        taxRate: { type: string, default: '0.00', example: '5.00' }
+        currentStock: { type: string, default: '0' }
+        reorderLevel: { type: string, default: '0' }
+        imageUrl: { type: string }
+        images:
+          type: array
+          items:
+            type: object
+            required: [url]
+            properties:
+              url: { type: string }
+              isPrimary: { type: boolean, default: false }
+              sortOrder: { type: integer, default: 0 }
+        variants:
+          type: array
+          items:
+            type: object
+            required: [name, sku]
+            properties:
+              name: { type: string }
+              sku: { type: string }
+              barcode: { type: string }
+              qrCode: { type: string }
+              attributes: { type: object }
+              sellingPrice: { type: string }
+        batches:
+          type: array
+          items:
+            type: object
+            required: [batchNumber, quantity]
+            properties:
+              batchNumber: { type: string }
+              expiryDate: { type: string, format: date }
+              manufacturedDate: { type: string, format: date }
+              quantity: { type: string }
+              purchasePrice: { type: string }
+    UpdateProductRequest:
+      type: object
+      properties:
+        name: { type: string }
+        sku: { type: string }
+        barcode: { type: string, nullable: true }
+        qrCode: { type: string, nullable: true }
+        description: { type: string }
+        unit: { type: string }
+        purchasePrice: { type: string }
+        sellingPrice: { type: string }
+        taxRate: { type: string }
+        reorderLevel: { type: string }
+        imageUrl: { type: string }
+        isActive: { type: boolean }
+        categoryId: { type: string, format: uuid, nullable: true }
+        brandId: { type: string, format: uuid, nullable: true }
+
+    # ---- Stock ----
+    Warehouse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        shopId: { type: string, format: uuid }
+        name: { type: string, example: 'Main Godown' }
+        code: { type: string, example: GD-01 }
+        address: { type: string, nullable: true }
+        isDefault: { type: boolean, example: true }
+    StockLevel:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+        warehouseName: { type: string, example: 'Main Godown' }
+        productId: { type: string, format: uuid }
+        productName: { type: string, example: 'Premium Rice 25kg' }
+        variantId: { type: string, format: uuid, nullable: true }
+        batchId: { type: string, format: uuid, nullable: true }
+        quantity: { type: string, example: '40' }
+        reservedQuantity: { type: string, example: '0' }
+    StockMovement:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        shopId: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid, nullable: true }
+        productId: { type: string, format: uuid }
+        variantId: { type: string, format: uuid, nullable: true }
+        batchId: { type: string, format: uuid, nullable: true }
+        movementType: { $ref: '#/components/schemas/StockMovementType' }
+        quantity: { type: string, example: '25' }
+        unitCost: { type: string, nullable: true, example: '100.00' }
+        referenceType: { type: string, nullable: true, example: MANUAL }
+        referenceId: { type: string, format: uuid, nullable: true }
+        note: { type: string, nullable: true }
+        createdById: { type: string, format: uuid, nullable: true }
+        createdAt: { type: string, format: date-time }
+    StockAlert:
+      type: object
+      properties:
+        productId: { type: string, format: uuid }
+        productName: { type: string, example: 'Premium Rice 25kg' }
+        variantId: { type: string, format: uuid, nullable: true }
+        currentStock: { type: string, example: '2' }
+        reorderLevel: { type: string, example: '10' }
+        warehouseId: { type: string, format: uuid, nullable: true }
+    ExpiryAlert:
+      type: object
+      properties:
+        batchId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        productName: { type: string, example: 'Premium Rice 25kg' }
+        batchNumber: { type: string, example: BATCH-JUN-2026 }
+        expiryDate: { type: string, format: date, example: '2026-12-31' }
+        daysToExpiry: { type: integer, example: 12 }
+        quantity: { type: string, example: '40' }
+    StockInRequest:
+      type: object
+      required: [warehouseId, items]
+      properties:
+        warehouseId: { type: string, format: uuid }
+        referenceType: { type: string, default: MANUAL, example: MANUAL }
+        referenceId: { type: string, format: uuid }
+        note: { type: string, example: 'Monthly restock' }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [productId, quantity]
+            properties:
+              productId: { type: string, format: uuid }
+              variantId: { type: string, format: uuid }
+              batchNumber: { type: string, example: BATCH-JUN-2026 }
+              expiryDate: { type: string, format: date }
+              manufacturedDate: { type: string, format: date }
+              quantity: { type: string, example: '25' }
+              unitCost: { type: string, example: '100.00' }
+    StockOutRequest:
+      type: object
+      required: [warehouseId, items]
+      properties:
+        warehouseId: { type: string, format: uuid }
+        referenceType: { type: string, default: MANUAL }
+        referenceId: { type: string, format: uuid }
+        note: { type: string }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [productId, quantity]
+            properties:
+              productId: { type: string, format: uuid }
+              variantId: { type: string, format: uuid }
+              batchId: { type: string, format: uuid }
+              quantity: { type: string, example: '5' }
+    StockTransferRequest:
+      type: object
+      required: [fromWarehouseId, toWarehouseId, items]
+      properties:
+        fromWarehouseId: { type: string, format: uuid }
+        toWarehouseId: { type: string, format: uuid }
+        note: { type: string, example: 'Festival stock shift' }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [productId, quantity]
+            properties:
+              productId: { type: string, format: uuid }
+              variantId: { type: string, format: uuid }
+              batchId: { type: string, format: uuid }
+              quantity: { type: string, example: '5' }
+    StockTransfer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fromWarehouseId: { type: string, format: uuid }
+        toWarehouseId: { type: string, format: uuid }
+        status: { type: string, example: COMPLETED }
+        note: { type: string, nullable: true }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              productId: { type: string, format: uuid }
+              quantity: { type: string, example: '5' }
+        createdAt: { type: string, format: date-time }
+
+    # ---- Purchases ----
+    PurchaseItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        productName: { type: string, example: 'Premium Rice 25kg' }
+        variantId: { type: string, format: uuid, nullable: true }
+        batchNumber: { type: string, nullable: true }
+        expiryDate: { type: string, format: date, nullable: true }
+        quantity: { type: string, example: '100' }
+        unitCost: { type: string, example: '1050.00' }
+        lineTotal: { type: string, example: '105000.00' }
+    Purchase:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        shopId: { type: string, format: uuid }
+        supplierId: { type: string, format: uuid, nullable: true }
+        supplierName: { type: string, nullable: true }
+        purchaseNumber: { type: string, example: PO-2026-0042 }
+        purchaseDate: { type: string, format: date }
+        totalAmount: { type: string, example: '105000.00' }
+        status: { type: string, example: RECEIVED }
+        notes: { type: string, nullable: true }
+        items: { type: array, items: { $ref: '#/components/schemas/PurchaseItem' } }
+        createdAt: { type: string, format: date-time }
+    CreatePurchaseRequest:
+      type: object
+      required: [items]
+      properties:
+        supplierId: { type: string, format: uuid }
+        purchaseNumber: { type: string, example: PO-2026-0042 }
+        purchaseDate: { type: string, format: date, example: '2026-09-20' }
+        warehouseId: { type: string, format: uuid }
+        notes: { type: string, example: 'Festival season stock' }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [productId, quantity, unitCost]
+            properties:
+              productId: { type: string, format: uuid }
+              variantId: { type: string, format: uuid }
+              batchNumber: { type: string, example: BATCH-SEP-2026 }
+              expiryDate: { type: string, format: date }
+              quantity: { type: string, example: '100' }
+              unitCost: { type: string, example: '1050.00' }
+    UpdatePurchaseRequest:
+      type: object
+      properties:
+        supplierId: { type: string, format: uuid }
+        purchaseNumber: { type: string }
+        purchaseDate: { type: string, format: date }
+        notes: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              productId: { type: string, format: uuid }
+              quantity: { type: string }
+              unitCost: { type: string }
+
+    # ---- Billing ----
+    InvoiceItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        productId: { type: string, format: uuid, nullable: true }
+        variantId: { type: string, format: uuid, nullable: true }
+        description: { type: string, example: 'Premium Rice 25kg' }
+        hsnCode: { type: string, example: '1006' }
+        quantity: { type: string, example: '2' }
+        unitPrice: { type: string, example: '1250.00' }
+        discountRate: { type: string, example: '5' }
+        discountAmount: { type: string, example: '125.00' }
+        gstRate: { type: string, example: '5' }
+        taxableAmount: { type: string, example: '2375.00' }
+        cgstAmount: { type: string, example: '59.38' }
+        sgstAmount: { type: string, example: '59.38' }
+        igstAmount: { type: string, example: '0.00' }
+        lineTotal: { type: string, example: '2493.76' }
+    Invoice:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        shopId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid, nullable: true }
+        customerName: { type: string, nullable: true }
+        orderId: { type: string, format: uuid, nullable: true }
+        invoiceNumber: { type: string, example: INV-2026-0042 }
+        status: { $ref: '#/components/schemas/InvoiceStatus' }
+        issueDate: { type: string, format: date, example: '2026-09-28' }
+        dueDate: { type: string, format: date, nullable: true }
+        placeOfSupply: { type: string, nullable: true, example: 'Tamil Nadu' }
+        isInterState: { type: boolean, example: false }
+        subtotal: { type: string, example: '2500.00' }
+        discountTotal: { type: string, example: '125.00' }
+        taxableTotal: { type: string, example: '2375.00' }
+        cgstTotal: { type: string, example: '59.38' }
+        sgstTotal: { type: string, example: '59.38' }
+        igstTotal: { type: string, example: '0.00' }
+        taxTotal: { type: string, example: '118.76' }
+        totalAmount: { type: string, example: '2493.76' }
+        paidAmount: { type: string, example: '0.00' }
+        pdfUrl: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        terms: { type: string, nullable: true }
+        items: { type: array, items: { $ref: '#/components/schemas/InvoiceItem' } }
+        payments: { type: array, items: { $ref: '#/components/schemas/Payment' } }
+        createdAt: { type: string, format: date-time }
+    CreateInvoiceRequest:
+      type: object
+      required: [items]
+      properties:
+        customerId: { type: string, format: uuid }
+        invoiceNumber: { type: string, example: INV-2026-0001 }
+        status: { $ref: '#/components/schemas/InvoiceStatus', default: DRAFT }
+        issueDate: { type: string, format: date, example: '2026-09-28' }
+        dueDate: { type: string, format: date, example: '2026-10-05' }
+        placeOfSupply: { type: string, example: 'Tamil Nadu' }
+        customerGstNumber: { type: string, example: 33AAAAA0000A1Z5 }
+        isInterState: { type: boolean, default: false }
+        notes: { type: string, example: 'Thank you for your business.' }
+        terms: { type: string, example: 'Payment due within 7 days.' }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [quantity, unitPrice]
+            properties:
+              productId: { type: string, format: uuid }
+              variantId: { type: string, format: uuid }
+              description: { type: string, example: 'Premium Rice 25kg' }
+              hsnCode: { type: string, example: '1006' }
+              quantity: { type: string, example: '2' }
+              unitPrice: { type: string, example: '1250.00' }
+              discountRate: { type: string, default: '0', example: '5' }
+              gstRate: { type: string, default: '0', example: '5' }
+    UpdateInvoiceRequest:
+      type: object
+      properties:
+        customerId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/InvoiceStatus' }
+        issueDate: { type: string, format: date }
+        dueDate: { type: string, format: date, nullable: true }
+        placeOfSupply: { type: string }
+        isInterState: { type: boolean }
+        notes: { type: string }
+        terms: { type: string }
+    Payment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        invoiceId: { type: string, format: uuid }
+        amount: { type: string, example: '2493.76' }
+        mode: { $ref: '#/components/schemas/PaymentMode' }
+        direction: { type: string, example: IN }
+        status: { type: string, example: SUCCESS }
+        transactionRef: { type: string, nullable: true, example: UPI-20260928-001 }
+        paidAt: { type: string, format: date-time }
+        note: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    CreatePaymentRequest:
+      type: object
+      required: [invoiceId, amount, mode]
+      properties:
+        invoiceId: { type: string, format: uuid }
+        amount: { type: string, example: '2493.76' }
+        mode: { $ref: '#/components/schemas/PaymentMode' }
+        transactionRef: { type: string, example: UPI-20260928-001 }
+        paidAt: { type: string, format: date-time }
+        note: { type: string, example: GPay }
+
+    # ---- Customers ----
+    Customer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        shopId: { type: string, format: uuid }
+        name: { type: string, example: 'Suresh Kumar' }
+        phone: { type: string, nullable: true, example: '9777777777' }
+        email: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        gstNumber: { type: string, nullable: true }
+        creditLimit: { type: string, example: '50000.00' }
+        outstandingBalance: { type: string, example: '2493.76' }
+        createdAt: { type: string, format: date-time }
+    CreateCustomerRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: 'Suresh Kumar' }
+        phone: { type: string, example: '9777777777' }
+        email: { type: string, format: email }
+        address: { type: string }
+        gstNumber: { type: string }
+        creditLimit: { type: string, default: '0.00', example: '50000.00' }
+    UpdateCustomerRequest:
+      type: object
+      properties:
+        name: { type: string }
+        phone: { type: string }
+        email: { type: string, format: email }
+        address: { type: string }
+        gstNumber: { type: string }
+        creditLimit: { type: string }
+    DuePayment:
+      type: object
+      properties:
+        customerId: { type: string, format: uuid }
+        customerName: { type: string, example: 'Suresh Kumar' }
+        phone: { type: string, nullable: true }
+        dueTotal: { type: string, example: '12400.00' }
+        invoiceCount: { type: integer, example: 3 }
+        oldestDueDate: { type: string, format: date, nullable: true }
+    HistoryEntry:
+      type: object
+      properties:
+        date: { type: string, format: date-time }
+        kind: { type: string, enum: [INVOICE, PAYMENT], example: INVOICE }
+        reference: { type: string, example: INV-2026-0042 }
+        amount: { type: string, example: '2493.76' }
+        status: { type: string, example: ISSUED }
+    CustomerPurchase:
+      type: object
+      properties:
+        invoiceId: { type: string, format: uuid }
+        invoiceNumber: { type: string, example: INV-2026-0042 }
+        issueDate: { type: string, format: date }
+        description: { type: string, example: 'Premium Rice 25kg' }
+        quantity: { type: string, example: '2' }
+        lineTotal: { type: string, example: '2493.76' }
+    CustomerLedger:
+      type: object
+      properties:
+        customerId: { type: string, format: uuid }
+        outstandingBalance: { type: string, example: '0.00' }
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              date: { type: string, format: date }
+              type: { type: string, enum: [DEBIT, CREDIT], example: DEBIT }
+              reference: { type: string, example: INV-2026-0042 }
+              debit: { type: string, example: '2493.76' }
+              credit: { type: string, example: '0.00' }
+              balance: { type: string, example: '2493.76' }
+    CustomerReminder:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        channel: { type: string, enum: [SMS, WHATSAPP], example: SMS }
+        recipient: { type: string, example: '9777777777' }
+        message: { type: string }
+        invoiceLink: { type: string, nullable: true }
+        status: { type: string, example: SENT }
+        createdAt: { type: string, format: date-time }
+
+    # ---- Finance ----
+    FinanceCategory:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: Rent }
+        type: { type: string, enum: [INCOME, EXPENSE] }
+    Revenue:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        categoryId: { type: string, format: uuid, nullable: true }
+        source: { type: string, example: 'Repair services' }
+        amount: { type: string, example: '12000.00' }
+        revenueDate: { type: string, format: date }
+        note: { type: string, nullable: true }
+    CreateRevenueRequest:
+      type: object
+      required: [amount, revenueDate]
+      properties:
+        categoryId: { type: string, format: uuid }
+        source: { type: string, example: 'Repair services' }
+        amount: { type: string, example: '12000.00' }
+        revenueDate: { type: string, format: date, example: '2026-09-28' }
+        note: { type: string }
+    Expense:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        categoryId: { type: string, format: uuid, nullable: true }
+        amount: { type: string, example: '12000.00' }
+        expenseDate: { type: string, format: date }
+        vendorName: { type: string, nullable: true, example: 'City Rentals' }
+        note: { type: string, nullable: true }
+        receiptUrl: { type: string, nullable: true }
+    CreateExpenseRequest:
+      type: object
+      required: [amount, expenseDate]
+      properties:
+        categoryId: { type: string, format: uuid }
+        amount: { type: string, example: '12000.00' }
+        expenseDate: { type: string, format: date, example: '2026-09-01' }
+        vendorName: { type: string, example: 'City Rentals' }
+        note: { type: string, example: 'September shop rent' }
+    Asset:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: 'Display fridge' }
+        assetType: { type: string, example: Equipment }
+        purchaseValue: { type: string, example: '85000.00' }
+        currentValue: { type: string, nullable: true, example: '70000.00' }
+        purchaseDate: { type: string, format: date, nullable: true }
+        status: { type: string, example: ACTIVE }
+    CreateAssetRequest:
+      type: object
+      required: [name, assetType, purchaseValue]
+      properties:
+        name: { type: string, example: 'Display fridge' }
+        assetType: { type: string, example: Equipment }
+        purchaseValue: { type: string, example: '85000.00' }
+        currentValue: { type: string, example: '70000.00' }
+        purchaseDate: { type: string, format: date }
+        status: { type: string, default: ACTIVE }
+    Liability:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: 'Business loan — HDFC' }
+        liabilityType: { type: string, example: Loan }
+        principalAmount: { type: string, example: '500000.00' }
+        outstandingAmount: { type: string, example: '120000.00' }
+        dueDate: { type: string, format: date, nullable: true }
+        status: { type: string, example: ACTIVE }
+    CreateLiabilityRequest:
+      type: object
+      required: [name, liabilityType, principalAmount, outstandingAmount]
+      properties:
+        name: { type: string, example: 'Business loan — HDFC' }
+        liabilityType: { type: string, example: Loan }
+        principalAmount: { type: string, example: '500000.00' }
+        outstandingAmount: { type: string, example: '120000.00' }
+        dueDate: { type: string, format: date }
+        status: { type: string, default: ACTIVE }
+    FinanceDashboard:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            totalRevenue: { type: string, example: '452300.00' }
+            invoiceRevenue: { type: string, example: '440300.00' }
+            manualRevenue: { type: string, example: '12000.00' }
+            totalExpenses: { type: string, example: '98000.00' }
+            grossProfit: { type: string, example: '354300.00' }
+            cashIn: { type: string, example: '430000.00' }
+            cashOut: { type: string, example: '90000.00' }
+            netCashFlow: { type: string, example: '340000.00' }
+            assetValue: { type: string, example: '850000.00' }
+            outstandingLiabilities: { type: string, example: '120000.00' }
+            taxPayable: { type: string, example: '45210.00' }
+            cgst: { type: string, example: '21000.00' }
+            sgst: { type: string, example: '21000.00' }
+            igst: { type: string, example: '3210.00' }
+
+    # ---- Analytics ----
+    SalesSeries:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              period: { type: string, example: '2026-09-28' }
+              total: { type: string, example: '18250.00' }
+              invoiceCount: { type: integer, example: 14 }
+
+    # ---- Subscriptions ----
+    SubscriptionPlan:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { $ref: '#/components/schemas/PlanCode' }
+        name: { type: string, example: Professional }
+        monthlyPrice: { type: string, example: '499.00' }
+        yearlyPrice: { type: string, example: '4990.00' }
+        currency: { type: string, example: INR }
+        trialDays: { type: integer, example: 14 }
+        limits:
+          type: object
+          properties:
+            users: { type: integer, example: 15 }
+            products: { type: integer, example: 5000 }
+            customers: { type: integer, example: 10000 }
+            invoicesPerMonth: { type: integer, example: 5000 }
+            storageMb: { type: integer, example: 10240 }
+        features: { type: object }
+        isActive: { type: boolean, example: true }
+    Subscription:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        shopId: { type: string, format: uuid }
+        planId: { type: string, format: uuid }
+        planCode: { $ref: '#/components/schemas/PlanCode' }
+        status: { $ref: '#/components/schemas/SubscriptionStatus' }
+        billingCycle: { type: string, example: MONTHLY }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date, nullable: true }
+        trialEndsAt: { type: string, format: date-time, nullable: true }
+        amount: { type: string, example: '0.00' }
+    CurrentSubscription:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            subscription: { $ref: '#/components/schemas/Subscription' }
+            plan: { $ref: '#/components/schemas/SubscriptionPlan' }
+            usage:
+              type: object
+              properties:
+                users: { type: integer, example: 4 }
+                products: { type: integer, example: 25 }
+                customers: { type: integer, example: 10 }
+                invoicesThisMonth: { type: integer, example: 15 }
+    ChangeSubscriptionRequest:
+      type: object
+      required: [planCode]
+      properties:
+        planCode: { $ref: '#/components/schemas/PlanCode' }
+        billingCycle: { type: string, enum: [MONTHLY, YEARLY], default: MONTHLY }
+        startTrial: { type: boolean, default: false }
+
+    # ---- Referrals ----
+    ReferralCode:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, example: RMS-ABCD1234 }
+        isActive: { type: boolean, example: true }
+        expiresAt: { type: string, format: date-time, nullable: true }
+    Referral:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, example: RMS-ABCD1234 }
+        referredShopId: { type: string, format: uuid, nullable: true }
+        status: { type: string, example: CONVERTED }
+        rewardAmount: { type: string, nullable: true, example: '500.00' }
+        rewardedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    Coupon:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, example: WELCOME500 }
+        discountType: { type: string, enum: [FLAT, PERCENT], example: FLAT }
+        discountValue: { type: string, example: '500.00' }
+        status: { type: string, example: ACTIVE }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        usedByShopId: { type: string, format: uuid, nullable: true }
+        usedAt: { type: string, format: date-time, nullable: true }
+    CreateCouponRequest:
+      type: object
+      required: [code, discountType, discountValue]
+      properties:
+        code: { type: string, example: WELCOME500 }
+        discountType: { type: string, enum: [FLAT, PERCENT] }
+        discountValue: { type: string, example: '500.00' }
+        expiresAt: { type: string, format: date-time }
+
+    # ---- Notifications ----
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, example: SUBSCRIPTION }
+        title: { type: string, example: 'Trial ending soon' }
+        message: { type: string }
+        data: { type: object, nullable: true }
+        isRead: { type: boolean, example: false }
+        readAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    # ---- Audit ----
+    AuditLog:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        shopId: { type: string, format: uuid, nullable: true }
+        actorType: { type: string, example: SHOP_USER }
+        actorId: { type: string, format: uuid, nullable: true }
+        action: { type: string, example: INVOICE_CREATED }
+        entityType: { type: string, example: Invoice }
+        entityId: { type: string, format: uuid, nullable: true }
+        category: { type: string, example: billing }
+        severity: { type: string, example: INFO }
+        oldValue: { type: object, nullable: true }
+        newValue: { type: object, nullable: true }
+        metadata: { type: object, nullable: true }
+        ipAddress: { type: string, nullable: true }
+        userAgent: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    # ---- Admin ----
+    Account:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string, example: 'Raghu Prasad' }
+        email: { type: string, nullable: true }
+        phone: { type: string }
+        status: { $ref: '#/components/schemas/AccountStatus' }
+        emailVerifiedAt: { type: string, format: date-time, nullable: true }
+        phoneVerifiedAt: { type: string, format: date-time, nullable: true }
+        lastLoginAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    Admin:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string, example: 'Support Lead' }
+        email: { type: string, example: support@raghumaya.shop }
+        role: { $ref: '#/components/schemas/AdminRole' }
+        status: { $ref: '#/components/schemas/AccountStatus' }
+        createdAt: { type: string, format: date-time }
+    AdminDashboard:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            shops:
+              type: object
+              properties:
+                total: { type: integer, example: 1240 }
+                active: { type: integer, example: 1180 }
+                inactive: { type: integer, example: 40 }
+                blocked: { type: integer, example: 20 }
+                newToday: { type: integer, example: 6 }
+                newThisMonth: { type: integer, example: 148 }
+            revenue:
+              type: object
+              properties:
+                daily: { type: string, example: '42000.00' }
+                weekly: { type: string, example: '280000.00' }
+                monthly: { type: string, example: '1150000.00' }
+                yearly: { type: string, example: '13200000.00' }
+            users:
+              type: object
+              properties:
+                total: { type: integer, example: 5100 }
+                active: { type: integer, example: 4900 }
+                suspended: { type: integer, example: 60 }
+            subscriptions:
+              type: object
+              properties:
+                free: { type: integer, example: 300 }
+                starter: { type: integer, example: 420 }
+                professional: { type: integer, example: 380 }
+                enterprise: { type: integer, example: 80 }
+            finance:
+              type: object
+              properties:
+                totalPlatformRevenue: { type: string, example: '13200000.00' }
+                pendingPayments: { type: string, example: '85000.00' }
+                subscriptionRenewals: { type: integer, example: 96 }
+    AdminCreateShopRequest:
+      type: object
+      required: [shopName, ownerName, ownerPhone]
+      properties:
+        shopName: { type: string, example: 'New Shop' }
+        shopType: { type: string, example: Retail }
+        gstNumber: { type: string }
+        shopPhone: { type: string }
+        shopEmail: { type: string, format: email }
+        ownerName: { type: string, example: Owner }
+        ownerPhone: { type: string, example: '9888888888' }
+        ownerEmail: { type: string, format: email }
+        country: { type: string, default: India }
+        state: { type: string }
+        city: { type: string }
+        postalCode: { type: string }
+        planCode: { $ref: '#/components/schemas/PlanCode' }
+    ApprovalRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, example: PROFILE_CHANGE }
+        status: { type: string, example: PENDING }
+        shopId: { type: string, format: uuid, nullable: true }
+        requestedById: { type: string, format: uuid, nullable: true }
+        reviewedById: { type: string, format: uuid, nullable: true }
+        oldValue: { type: object, nullable: true }
+        requestedValue: { type: object }
+        reason: { type: string, nullable: true }
+        reviewerComment: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        reviewedAt: { type: string, format: date-time, nullable: true }
+    SupportTicket:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        ticketNo: { type: string, example: TKT-2026-0091 }
+        shopId: { type: string, format: uuid, nullable: true }
+        createdById: { type: string, format: uuid, nullable: true }
+        assignedToId: { type: string, format: uuid, nullable: true }
+        subject: { type: string, example: 'Invoice PDF not generating' }
+        description: { type: string }
+        priority: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+        status: { type: string, enum: [OPEN, ASSIGNED, WAITING_ON_CUSTOMER, RESOLVED, CLOSED] }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+        closedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    CreateTicketRequest:
+      type: object
+      required: [subject, description]
+      properties:
+        shopId: { type: string, format: uuid }
+        subject: { type: string, example: 'Invoice PDF not generating' }
+        description: { type: string }
+        priority: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL], default: MEDIUM }
+    UpdateTicketRequest:
+      type: object
+      properties:
+        subject: { type: string }
+        description: { type: string }
+        priority: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+        status: { type: string, enum: [OPEN, ASSIGNED, WAITING_ON_CUSTOMER, RESOLVED, CLOSED] }
+        assignedToId: { type: string, format: uuid, nullable: true }
+    LoginHistoryEntry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        adminId: { type: string, format: uuid, nullable: true }
+        email: { type: string, example: support@raghumaya.shop }
+        success: { type: boolean, example: true }
+        reason: { type: string, nullable: true }
+        ipAddress: { type: string, nullable: true }
+        userAgent: { type: string, nullable: true }
+        deviceHash: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
