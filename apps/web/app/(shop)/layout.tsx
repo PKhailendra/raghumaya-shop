@@ -1,39 +1,21 @@
 "use client";
 
 import type React from "react";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import {
-  LayoutDashboard,
-  Package,
-  Boxes,
-  ShoppingCart,
-  Receipt,
-  Users,
-  Wallet,
-  UserCog,
-  Crown,
-  Settings,
-} from "lucide-react";
-import { AppShell, ShopSwitcher, type NavItem } from "@/components/app-shell";
+import { useEffect, useMemo } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { AppShell, ShopSwitcher } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth";
+import { ShopProvider, useShop } from "@/lib/shop-context";
+import { SHOP_NAV, firstAllowedPath } from "@/lib/shop-nav";
 
-const NAV: NavItem[] = [
-  { href: "/shop/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/shop/inventory", label: "Inventory", icon: Package },
-  { href: "/shop/stock", label: "Stock", icon: Boxes },
-  { href: "/shop/purchases", label: "Purchases", icon: ShoppingCart },
-  { href: "/shop/billing", label: "Billing", icon: Receipt },
-  { href: "/shop/customers", label: "Customers", icon: Users },
-  { href: "/shop/finance", label: "Finance", icon: Wallet },
-  { href: "/shop/team", label: "Team", icon: UserCog },
-  { href: "/shop/subscription", label: "Subscription", icon: Crown },
-  { href: "/shop/settings", label: "Settings", icon: Settings },
-];
-
-export default function ShopLayout({ children }: { children: React.ReactNode }) {
+function ShopShell({ children }: { children: React.ReactNode }) {
   const { account, loading, activeShopId } = useAuth();
+  const { can, loading: shopLoading } = useShop();
   const router = useRouter();
+  const pathname = usePathname();
+
+  const items = useMemo(() => SHOP_NAV.filter((n) => !n.permission || can(n.permission)), [can]);
+  const allowedHrefs = useMemo(() => new Set(items.map((i) => i.href)), [items]);
 
   useEffect(() => {
     if (loading) return;
@@ -43,19 +25,42 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
     }
   }, [account, loading, router]);
 
+  // Keep users off pages their role cannot access (deep links, OTP flow, role changes).
+  useEffect(() => {
+    if (loading || shopLoading || !account || account.type !== "shop" || !activeShopId) return;
+    const base = pathname.split("?")[0];
+    const onKnownPage = SHOP_NAV.some((n) => base === n.href || base.startsWith(n.href + "/"));
+    const allowed = [...allowedHrefs].some((h) => base === h || base.startsWith(h + "/"));
+    if (onKnownPage && !allowed) {
+      router.replace(firstAllowedPath(can));
+    }
+  }, [loading, shopLoading, account, activeShopId, pathname, allowedHrefs, can, router]);
+
   if (loading || !account) {
     return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Loading…</div>;
   }
 
   return (
-    <AppShell items={NAV} title="My Shop" shopSwitcher={<ShopSwitcher />}>
+    <AppShell items={items} title="My Shop" shopSwitcher={<ShopSwitcher />}>
       {!activeShopId && (account.memberships?.length ?? 0) > 0 ? (
         <div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
           Select a shop from the switcher above to continue.
+        </div>
+      ) : activeShopId && !shopLoading && items.length === 0 ? (
+        <div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
+          No pages assigned to your role yet. Please contact your shop owner.
         </div>
       ) : (
         children
       )}
     </AppShell>
+  );
+}
+
+export default function ShopLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <ShopProvider>
+      <ShopShell>{children}</ShopShell>
+    </ShopProvider>
   );
 }

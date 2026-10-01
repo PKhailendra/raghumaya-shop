@@ -5,6 +5,7 @@ import { signAccessToken } from '../../lib/crypto';
 import { getPagination, pageMeta } from '../../lib/utils';
 import { HttpError } from '../../middleware/errorHandler';
 import type { ReqCtx } from '../ctx';
+import { requireShopId } from '../ctx';
 import type { ShopPermission, UserRole } from '@raghumaya/shared';
 import { DEFAULT_ROLE_PERMISSIONS, SHOP_PERMISSIONS } from '@raghumaya/shared';
 
@@ -32,6 +33,31 @@ export async function myShops(ctx: ReqCtx) {
     orderBy: { joinedAt: 'desc' },
   });
   return memberships.map((m) => ({ ...m.shop, role: m.role, membershipId: m.id }));
+}
+
+/** Effective role + permissions for the caller's active shop (mirrors auth middleware). */
+export async function shopContext(ctx: ReqCtx) {
+  const shopId = requireShopId(ctx);
+  const membership = await prisma.shopMembership.findFirst({
+    where: { shopId, accountId: ctx.actor.accountId!, deletedAt: null },
+    include: { shop: true },
+  });
+  if (!membership || membership.status !== 'ACTIVE') {
+    throw new HttpError(403, 'SHOP_ACCESS_DENIED', 'No active membership for this shop');
+  }
+  const stored = [...((membership.permissions as string[] | null) ?? [])];
+  const permissions: string[] =
+    membership.role === 'OWNER'
+      ? [...SHOP_PERMISSIONS]
+      : (stored.length > 0
+          ? stored
+          : ((DEFAULT_ROLE_PERMISSIONS[membership.role as Exclude<UserRole, 'OWNER'>] ?? []) as string[]));
+  return {
+    shop: membership.shop,
+    membershipId: membership.id,
+    role: membership.role,
+    permissions,
+  };
 }
 
 export async function getShop(ctx: ReqCtx, id: string) {

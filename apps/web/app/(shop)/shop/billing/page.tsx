@@ -25,7 +25,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Can } from "@/lib/shop-context";
 import { Plus, FileText, Share2, MessageCircle, Download, Trash2, IndianRupee } from "lucide-react";
+import { BarcodeScanner } from "@/components/barcode-scanner";
 
 const STATUS_VARIANTS: Record<string, "success" | "warning" | "destructive" | "info" | "secondary"> = {
   DRAFT: "secondary",
@@ -65,9 +67,11 @@ export default function ShopBillingPage() {
         title="Billing"
         description="Invoices and payments."
         actions={
-          <Button onClick={() => setBuilderOpen(true)}>
-            <Plus className="h-4 w-4" /> New invoice
-          </Button>
+          <Can any={["INVOICE_CREATE"]}>
+            <Button onClick={() => setBuilderOpen(true)}>
+              <Plus className="h-4 w-4" /> New invoice
+            </Button>
+          </Can>
         }
       />
 
@@ -106,7 +110,11 @@ export default function ShopBillingPage() {
             <EmptyState
               title="No invoices yet"
               description="Create your first invoice."
-              action={<Button onClick={() => setBuilderOpen(true)}><Plus className="h-4 w-4" /> New invoice</Button>}
+              action={
+                <Can any={["INVOICE_CREATE"]}>
+                  <Button onClick={() => setBuilderOpen(true)}><Plus className="h-4 w-4" /> New invoice</Button>
+                </Can>
+              }
             />
           ) : (
             <Card>
@@ -126,7 +134,7 @@ export default function ShopBillingPage() {
                     {rows.map((inv) => (
                       <TableRow key={inv.id} className="cursor-pointer" onClick={() => setSelectedInvoice(inv)}>
                         <TableCell className="font-mono text-xs">{inv.invoiceNumber}</TableCell>
-                        <TableCell>{inv.customerName ?? "-"}</TableCell>
+                        <TableCell>{inv.customerName ?? <span className="text-muted-foreground">Walk-in</span>}</TableCell>
                         <TableCell>{formatDateTime(inv.invoiceDate)}</TableCell>
                         <TableCell className="text-right">{inr(inv.grandTotal)}</TableCell>
                         <TableCell className="text-right">{inr(inv.balanceAmount)}</TableCell>
@@ -302,7 +310,30 @@ function InvoiceBuilder({ onClose, onDone }: { onClose: () => void; onDone: () =
           </div>
 
           <div className="space-y-3">
-            <Label>Line items</Label>
+            <div className="flex items-center justify-between">
+              <Label>Line items</Label>
+              <BarcodeScanner
+                buttonLabel="Scan item"
+                onScan={async (code) => {
+                  try {
+                    const p = await inventoryApi.lookup("barcode", code);
+                    setItems((prev) => [
+                      ...prev,
+                      {
+                        productId: p.id,
+                        description: p.name,
+                        quantity: 1,
+                        unitPrice: p.sellingPrice,
+                        discountRate: "0",
+                        gstRate: p.gstRate ?? "18",
+                      },
+                    ]);
+                  } catch {
+                    setError(`No product found for barcode ${code}.`);
+                  }
+                }}
+              />
+            </div>
             {items.map((it, i) => (
               <div key={i} className="rounded-md border p-3 space-y-2">
                 <div className="grid grid-cols-12 gap-2">
@@ -452,9 +483,11 @@ function InvoiceDetail({ invoice, onClose, onChanged }: { invoice: Invoice; onCl
           <Button size="sm" variant="outline" onClick={openWhatsapp} disabled={!!busy}>
             <MessageCircle className="h-3.5 w-3.5 mr-1" /> {busy === "whatsapp" ? "Preparing…" : "WhatsApp"}
           </Button>
-          <Button size="sm" onClick={() => setPayOpen(true)}>
-            <IndianRupee className="h-3.5 w-3.5 mr-1" /> Record payment
-          </Button>
+          <Can any={["PAYMENT_CREATE"]}>
+            <Button size="sm" onClick={() => setPayOpen(true)}>
+              <IndianRupee className="h-3.5 w-3.5 mr-1" /> Record payment
+            </Button>
+          </Can>
         </div>
 
         <div className="grid grid-cols-2 gap-4 text-sm">

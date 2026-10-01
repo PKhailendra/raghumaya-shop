@@ -5,7 +5,8 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, isPlatformAdmin } from "@/lib/auth";
-import { ApiError } from "@/lib/api";
+import { ApiError, shopsApi } from "@/lib/api";
+import { firstAllowedPath } from "@/lib/shop-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,7 +59,16 @@ function LoginForm() {
         } else if (isPlatformAdmin(res.account)) {
           router.replace("/dashboard");
         } else {
-          router.replace("/shop/dashboard");
+          let target = "/shop/dashboard";
+          try {
+            const ctx = await shopsApi.context();
+            const perms = new Set(ctx.permissions ?? []);
+            const can = (p: string) => ctx.role === "OWNER" || perms.has(p);
+            target = firstAllowedPath(can);
+          } catch {
+            // fall back to dashboard; shop shell will handle permissions
+          }
+          router.replace(target);
         }
       }
     } catch (err) {

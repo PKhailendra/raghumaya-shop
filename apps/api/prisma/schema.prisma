@@ -41,47 +41,6 @@ enum ShopStatus {
   BLOCKED
 }
 
-enum ShopPermission {
-  SHOP_VIEW
-  SHOP_UPDATE
-  EMPLOYEE_VIEW
-  EMPLOYEE_CREATE
-  EMPLOYEE_UPDATE
-  EMPLOYEE_DELETE
-  INVENTORY_VIEW
-  INVENTORY_CREATE
-  INVENTORY_UPDATE
-  INVENTORY_DELETE
-  STOCK_VIEW
-  STOCK_ADJUST
-  CUSTOMER_VIEW
-  CUSTOMER_CREATE
-  CUSTOMER_UPDATE
-  CUSTOMER_DELETE
-  ORDER_VIEW
-  ORDER_CREATE
-  ORDER_UPDATE
-  ORDER_CANCEL
-  INVOICE_VIEW
-  INVOICE_CREATE
-  INVOICE_UPDATE
-  PAYMENT_VIEW
-  PAYMENT_CREATE
-  FINANCE_VIEW
-  FINANCE_CREATE
-  FINANCE_UPDATE
-  FINANCE_DELETE
-  ANALYTICS_VIEW
-  SETTINGS_VIEW
-  SETTINGS_UPDATE
-  SUBSCRIPTION_VIEW
-  SUBSCRIPTION_MANAGE
-  REFERRAL_VIEW
-  REFERRAL_MANAGE
-  NOTIFICATION_VIEW
-  NOTIFICATION_UPDATE
-  AUDIT_VIEW
-}
 
 enum UserRole {
   OWNER
@@ -240,6 +199,10 @@ model Shop {
   smsLogs           SmsLog[]
   auditLogs         AuditLog[]
   tickets           SupportTicket[]
+  Attendance        Attendance[]
+  SalaryStructure   SalaryStructure[]
+  SalaryAdvance     SalaryAdvance[]
+  SalaryPayment     SalaryPayment[]
 
   @@index([status])
   @@index([ownerAccountId])
@@ -254,7 +217,7 @@ model ShopMembership {
   account        Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
   role           UserRole         @default(STAFF)
   status         MembershipStatus @default(ACTIVE)
-  permissions    ShopPermission[] @default([])
+  permissions    String[]         @default([])
   invitedById    String?          @db.Uuid
   joinedAt       DateTime?
   lastAccessedAt DateTime?
@@ -1250,4 +1213,100 @@ model AuditLog {
   @@index([category, createdAt])
   @@index([severity, createdAt])
   @@map("audit_logs")
+}
+
+// ===================== HR: ATTENDANCE & SALARY =====================
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  PAID_LEAVE
+  WEEKLY_OFF
+}
+
+enum SalaryPaymentStatus {
+  PENDING
+  PAID
+}
+
+model Attendance {
+  id           String           @id @default(uuid()) @db.Uuid
+  shopId       String           @db.Uuid
+  shop         Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  membershipId String           @db.Uuid
+  date         DateTime         @db.Date
+  status       AttendanceStatus @default(PRESENT)
+  markedById   String?          @db.Uuid
+  notes        String?          @db.VarChar(500)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([shopId, membershipId, date])
+  @@index([shopId, date])
+  @@map("attendance")
+}
+
+model SalaryStructure {
+  id            String   @id @default(uuid()) @db.Uuid
+  shopId        String   @db.Uuid
+  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  membershipId  String   @db.Uuid
+  monthlySalary Decimal  @db.Decimal(12, 2)
+  effectiveFrom DateTime @default(now()) @db.Date
+  createdById   String?  @db.Uuid
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([membershipId])
+  @@index([shopId])
+  @@map("salary_structures")
+}
+
+model SalaryAdvance {
+  id           String   @id @default(uuid()) @db.Uuid
+  shopId       String   @db.Uuid
+  shop         Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  membershipId String   @db.Uuid
+  amount       Decimal  @db.Decimal(12, 2)
+  advanceDate  DateTime @default(now()) @db.Date
+  notes        String?  @db.VarChar(500)
+  givenById    String?  @db.Uuid
+  createdAt    DateTime @default(now())
+
+  @@index([shopId, advanceDate])
+  @@index([membershipId])
+  @@map("salary_advances")
+}
+
+model SalaryPayment {
+  id            String              @id @default(uuid()) @db.Uuid
+  shopId        String              @db.Uuid
+  shop          Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  membershipId  String              @db.Uuid
+  year          Int
+  month         Int
+  monthlySalary Decimal             @db.Decimal(12, 2)
+  totalDays     Int
+  presentDays   Decimal             @db.Decimal(5, 2)
+  absentDays    Decimal             @db.Decimal(5, 2)
+  leaveDays     Decimal             @db.Decimal(5, 2)
+  unmarkedDays  Int                 @default(0)
+  grossPayable  Decimal             @db.Decimal(12, 2)
+  advances      Decimal             @default(0) @db.Decimal(12, 2)
+  bonus         Decimal             @default(0) @db.Decimal(12, 2)
+  deductions    Decimal             @default(0) @db.Decimal(12, 2)
+  netPayable    Decimal             @db.Decimal(12, 2)
+  paidAmount    Decimal             @default(0) @db.Decimal(12, 2)
+  status        SalaryPaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  paidById      String?             @db.Uuid
+  mode          String?             @db.VarChar(20)
+  notes         String?             @db.VarChar(500)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@unique([shopId, membershipId, year, month])
+  @@index([shopId, year, month])
+  @@map("salary_payments")
 }

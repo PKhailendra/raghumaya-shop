@@ -17,6 +17,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Search, Plus, ScanBarcode, Pencil, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Can } from "@/lib/shop-context";
+import { BarcodeScanner } from "@/components/barcode-scanner";
 
 export default function ShopInventoryPage() {
   const [page, setPage] = useState(1);
@@ -47,13 +49,14 @@ export default function ShopInventoryPage() {
     onSuccess: invalidate,
   });
 
-  const lookupBarcode = async () => {
+  const lookupBarcode = async (code?: string) => {
+    const value = (code ?? barcode).trim();
     setBarcodeError(null);
     setBarcodeResult(null);
-    if (!barcode.trim()) return;
+    if (!value) return;
     setBarcodeBusy(true);
     try {
-      const p = await inventoryApi.lookup("barcode", barcode.trim());
+      const p = await inventoryApi.lookup("barcode", value);
       setBarcodeResult(p);
     } catch (err) {
       setBarcodeError(err instanceof ApiError ? err.message : "Product not found.");
@@ -72,9 +75,11 @@ export default function ShopInventoryPage() {
         title="Inventory"
         description="Products, variants and batches."
         actions={
-          <Button onClick={() => setEditor({})}>
-            <Plus className="h-4 w-4" /> Add product
-          </Button>
+          <Can any={["INVENTORY_CREATE"]}>
+            <Button onClick={() => setEditor({})}>
+              <Plus className="h-4 w-4" /> Add product
+            </Button>
+          </Can>
         }
       />
 
@@ -91,9 +96,16 @@ export default function ShopInventoryPage() {
               onKeyDown={(e) => e.key === "Enter" && lookupBarcode()}
             />
           </div>
-          <Button onClick={lookupBarcode} disabled={barcodeBusy}>
+          <Button onClick={() => lookupBarcode()} disabled={barcodeBusy}>
             <ScanBarcode className="h-4 w-4 mr-1" /> {barcodeBusy ? "Looking up…" : "Look up"}
           </Button>
+          <BarcodeScanner
+            buttonLabel="Scan"
+            onScan={(code) => {
+              setBarcode(code);
+              setTimeout(() => lookupBarcode(code), 50);
+            }}
+          />
         </CardContent>
         {(barcodeResult || barcodeError) && (
           <CardContent className="pt-0">
@@ -104,9 +116,11 @@ export default function ShopInventoryPage() {
                   <div className="font-medium">{barcodeResult.name}</div>
                   <div className="text-xs text-muted-foreground">SKU {barcodeResult.sku} · Stock {barcodeResult.currentStock}</div>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => { setEditor({ product: barcodeResult }); }}>
-                  <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
-                </Button>
+                <Can any={["INVENTORY_UPDATE"]}>
+                  <Button size="sm" variant="outline" onClick={() => { setEditor({ product: barcodeResult }); }}>
+                    <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                  </Button>
+                </Can>
               </div>
             )}
           </CardContent>
@@ -143,7 +157,11 @@ export default function ShopInventoryPage() {
         <EmptyState
           title="No products"
           description="Add your first product to start managing inventory."
-          action={<Button onClick={() => setEditor({})}><Plus className="h-4 w-4" /> Add product</Button>}
+          action={
+            <Can any={["INVENTORY_CREATE"]}>
+              <Button onClick={() => setEditor({})}><Plus className="h-4 w-4" /> Add product</Button>
+            </Can>
+          }
         />
       ) : (
         <Card>
@@ -176,12 +194,16 @@ export default function ShopInventoryPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button size="sm" variant="outline" onClick={() => setEditor({ product: p })}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => setDeleteTarget(p)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <Can any={["INVENTORY_UPDATE"]}>
+                          <Button size="sm" variant="outline" onClick={() => setEditor({ product: p })}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </Can>
+                        <Can any={["INVENTORY_DELETE"]}>
+                          <Button size="sm" variant="destructive" onClick={() => setDeleteTarget(p)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </Can>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -242,6 +264,7 @@ function ProductEditor({
   const [mrp, setMrp] = useState(product?.mrp ?? "");
   const [gstRate, setGstRate] = useState(product?.gstRate ?? "0");
   const [unit, setUnit] = useState(product?.unit ?? "pcs");
+  const [stock, setStock] = useState(product ? String(product.currentStock) : "0");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -251,6 +274,8 @@ function ProductEditor({
     if (!name.trim()) return setError("Product name is required.");
     if (!sku.trim()) return setError("SKU is required.");
     if (!sellingPrice || Number(sellingPrice) <= 0) return setError("Selling price must be greater than 0.");
+    const stockNum = Number(stock);
+    if (!Number.isFinite(stockNum) || stockNum < 0) return setError("Stock must be a non-negative number.");
     setBusy(true);
     try {
       const body = {
@@ -263,6 +288,7 @@ function ProductEditor({
         mrp: mrp || undefined,
         gstRate,
         unit,
+        currentStock: stockNum,
       };
       if (product) await inventoryApi.updateProduct(product.id, body);
       else await inventoryApi.createProduct(body);
@@ -318,6 +344,10 @@ function ProductEditor({
             <div className="space-y-2">
               <Label>Unit</Label>
               <Select value={unit} onChange={setUnit} options={["pcs", "kg", "g", "ltr", "ml", "box", "pack"].map((u) => ({ value: u, label: toTitle(u) }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="p-stock">{product ? "Current stock" : "Opening stock"}</Label>
+              <Input id="p-stock" type="number" min="0" step="1" value={stock} onChange={(e) => setStock(e.target.value)} />
             </div>
           </div>
           <DialogFooter>

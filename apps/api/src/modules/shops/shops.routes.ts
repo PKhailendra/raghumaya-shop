@@ -20,6 +20,7 @@ r.use(authenticate);
 
 r.post('/', validateRequest({ body: createShopSchema }), c.createShop);
 r.get('/', c.myShops);
+r.get('/context', requireShopContext, c.shopContext);
 r.post('/switch', validateRequest({ body: switchShopSchema }), c.switchShop);
 
 r.get('/:id', validateRequest({ params: shopParam }), c.getShop);

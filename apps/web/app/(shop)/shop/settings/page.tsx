@@ -4,6 +4,7 @@ import type React from "react";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { shopsApi, authApi, ApiError } from "@/lib/api";
+import { Can } from "@/lib/shop-context";
 import { formatDateTime } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
 import { PageHeader, ErrorState } from "@/components/states";
@@ -77,6 +78,7 @@ export default function ShopSettingsPage() {
       <PageHeader title="Settings" description="Shop profile, security and devices." />
 
       <div className="max-w-2xl space-y-6">
+        <Can any={["SETTINGS_UPDATE"]}>
         <Card>
           <CardHeader>
             <CardTitle>Shop profile</CardTitle>
@@ -122,6 +124,7 @@ export default function ShopSettingsPage() {
             )}
           </CardContent>
         </Card>
+        </Can>
 
         <Card>
           <CardHeader>

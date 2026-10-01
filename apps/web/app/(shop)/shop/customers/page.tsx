@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Can } from "@/lib/shop-context";
 import { Search, Plus, MessageCircle, Send } from "lucide-react";
 
 export default function ShopCustomersPage() {
@@ -45,9 +46,11 @@ export default function ShopCustomersPage() {
         title="Customers"
         description="Customer records, balances and payment reminders."
         actions={
-          <Button onClick={() => setEditor({})}>
-            <Plus className="h-4 w-4" /> Add customer
-          </Button>
+          <Can any={["CUSTOMER_CREATE"]}>
+            <Button onClick={() => setEditor({})}>
+              <Plus className="h-4 w-4" /> Add customer
+            </Button>
+          </Can>
         }
       />
 
@@ -81,7 +84,11 @@ export default function ShopCustomersPage() {
             <EmptyState
               title="No customers yet"
               description="Add your first customer."
-              action={<Button onClick={() => setEditor({})}><Plus className="h-4 w-4" /> Add customer</Button>}
+              action={
+                <Can any={["CUSTOMER_CREATE"]}>
+                  <Button onClick={() => setEditor({})}><Plus className="h-4 w-4" /> Add customer</Button>
+                </Can>
+              }
             />
           ) : (
             <Card>

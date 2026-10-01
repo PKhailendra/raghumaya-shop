@@ -746,3 +746,63 @@ export const planCreateSchema = z.object({
 });
 
 export const planUpdateSchema = planCreateSchema.partial().omit({ code: true });
+
+/* ------------------------------------------------------------------ */
+/* HR: attendance + salary                                             */
+/* ------------------------------------------------------------------ */
+
+export const ATTENDANCE_STATUSES = ['PRESENT', 'ABSENT', 'HALF_DAY', 'PAID_LEAVE', 'WEEKLY_OFF'] as const;
+export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
+
+export const attendanceDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD');
+
+export const attendanceMarkSchema = z.object({
+  date: attendanceDateSchema,
+  records: z
+    .array(
+      z.object({
+        membershipId: uuidSchema,
+        status: z.enum(ATTENDANCE_STATUSES),
+        notes: z.string().trim().max(500).optional(),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+
+export const attendanceQuerySchema = z.object({
+  date: attendanceDateSchema.optional(),
+  fromDate: attendanceDateSchema.optional(),
+  toDate: attendanceDateSchema.optional(),
+  membershipId: uuidSchema.optional(),
+});
+
+export const salaryStructureSchema = z.object({
+  monthlySalary: moneySchema,
+  effectiveFrom: attendanceDateSchema.optional(),
+});
+
+export const salaryAdvanceSchema = z.object({
+  membershipId: uuidSchema,
+  amount: moneySchema,
+  advanceDate: attendanceDateSchema.optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export const salaryPaySchema = z.object({
+  membershipId: uuidSchema,
+  year: z.coerce.number().int().min(2020).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+  bonus: moneySchema.optional(),
+  deductions: moneySchema.optional(),
+  mode: z.enum(['CASH', 'UPI', 'BANK_TRANSFER']).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export const salaryQuerySchema = z.object({
+  year: z.coerce.number().int().min(2020).max(2100).optional(),
+  month: z.coerce.number().int().min(1).max(12).optional(),
+  membershipId: uuidSchema.optional(),
+});

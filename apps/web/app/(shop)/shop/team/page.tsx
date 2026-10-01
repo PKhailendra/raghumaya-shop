@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Can } from "@/lib/shop-context";
 import { Plus, Trash2 } from "lucide-react";
 import { SHOP_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS } from "@raghumaya/shared";
 
@@ -49,9 +50,11 @@ export default function ShopTeamPage() {
         title="Team"
         description="Invite staff and manage roles and permissions."
         actions={
-          <Button onClick={() => setInviteOpen(true)}>
-            <Plus className="h-4 w-4" /> Invite member
-          </Button>
+          <Can any={["EMPLOYEE_CREATE"]}>
+            <Button onClick={() => setInviteOpen(true)}>
+              <Plus className="h-4 w-4" /> Invite member
+            </Button>
+          </Can>
         }
       />
 
@@ -66,7 +69,11 @@ export default function ShopTeamPage() {
         <EmptyState
           title="No team members"
           description="Invite staff to help run your shop."
-          action={<Button onClick={() => setInviteOpen(true)}><Plus className="h-4 w-4" /> Invite member</Button>}
+          action={
+            <Can any={["EMPLOYEE_CREATE"]}>
+              <Button onClick={() => setInviteOpen(true)}><Plus className="h-4 w-4" /> Invite member</Button>
+            </Can>
+          }
         />
       ) : (
         <Card>
@@ -98,10 +105,14 @@ export default function ShopTeamPage() {
                       <div className="flex justify-end gap-1">
                         {m.role !== "OWNER" && (
                           <>
-                            <Button size="sm" variant="outline" onClick={() => setEditor(m)}>Edit role</Button>
-                            <Button size="sm" variant="destructive" onClick={() => setRemoveTarget(m)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            <Can any={["EMPLOYEE_UPDATE"]}>
+                              <Button size="sm" variant="outline" onClick={() => setEditor(m)}>Edit role</Button>
+                            </Can>
+                            <Can any={["EMPLOYEE_DELETE"]}>
+                              <Button size="sm" variant="destructive" onClick={() => setRemoveTarget(m)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </Can>
                           </>
                         )}
                       </div>

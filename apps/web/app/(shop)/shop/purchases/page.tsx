@@ -14,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ProductPicker } from "@/components/product-picker";
+import { Can } from "@/lib/shop-context";
 import { Plus, Trash2 } from "lucide-react";
 
 export default function ShopPurchasesPage() {
@@ -35,9 +37,11 @@ export default function ShopPurchasesPage() {
         title="Purchases"
         description="Purchase orders from suppliers. Stock is updated automatically."
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> New purchase
-          </Button>
+          <Can any={["STOCK_ADJUST"]}>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" /> New purchase
+            </Button>
+          </Can>
         }
       />
 
@@ -52,7 +56,11 @@ export default function ShopPurchasesPage() {
         <EmptyState
           title="No purchases yet"
           description="Record a purchase to add stock."
-          action={<Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> New purchase</Button>}
+          action={
+            <Can any={["STOCK_ADJUST"]}>
+              <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> New purchase</Button>
+            </Can>
+          }
         />
       ) : (
         <Card>
@@ -100,6 +108,7 @@ export default function ShopPurchasesPage() {
 function PurchaseDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [items, setItems] = useState<PurchaseItem[]>([{ productId: "", quantity: 1, unitPrice: "" }]);
+  const [selectedProducts, setSelectedProducts] = useState<Record<string, import("@/lib/api").Product>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -113,7 +122,7 @@ function PurchaseDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
     e.preventDefault();
     setError(null);
     const valid = items.filter((it) => it.productId.trim() && Number(it.quantity) > 0 && Number(it.unitPrice) >= 0);
-    if (valid.length === 0) return setError("Add at least one item with product ID, quantity and price.");
+    if (valid.length === 0) return setError("Add at least one item with a product, quantity and price.");
     setBusy(true);
     try {
       await purchasesApi.create({
@@ -148,8 +157,19 @@ function PurchaseDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
           <div className="space-y-2">
             <Label>Items</Label>
             {items.map((it, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2">
-                <Input className="col-span-5" placeholder="Product ID" value={it.productId} onChange={(e) => updateItem(i, { productId: e.target.value })} />
+              <div key={i} className="grid grid-cols-12 gap-2 items-start">
+                <div className="col-span-5">
+                  <ProductPicker
+                    value={it.productId ? selectedProducts[it.productId] ?? null : null}
+                    onSelect={(p) => {
+                      if (p) setSelectedProducts((prev) => ({ ...prev, [p.id]: p }));
+                      updateItem(i, {
+                        productId: p?.id ?? "",
+                        unitPrice: p ? (p.purchasePrice || p.sellingPrice) : it.unitPrice,
+                      });
+                    }}
+                  />
+                </div>
                 <Input className="col-span-2" type="number" min="1" placeholder="Qty" value={it.quantity} onChange={(e) => updateItem(i, { quantity: Number(e.target.value) })} />
                 <Input className="col-span-4" type="number" min="0" step="0.01" placeholder="Unit price" value={it.unitPrice} onChange={(e) => updateItem(i, { unitPrice: e.target.value })} />
                 <Button type="button" size="icon" variant="ghost" className="col-span-1" onClick={() => setItems((p) => p.filter((_, idx) => idx !== i))}>

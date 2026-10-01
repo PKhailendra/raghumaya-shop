@@ -11,6 +11,10 @@ export const myShops = asyncHandler(async (req: Request, res: Response) => {
   res.json({ data: await service.myShops(ctxFromReq(req)) });
 });
 
+export const shopContext = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await service.shopContext(ctxFromReq(req)));
+});
+
 export const getShop = asyncHandler(async (req: Request, res: Response) => {
   res.json(await service.getShop(ctxFromReq(req), req.params.id));
 });

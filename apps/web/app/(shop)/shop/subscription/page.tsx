@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { subscriptionsApi, ApiError, type Plan } from "@/lib/api";
+import { Can } from "@/lib/shop-context";
 import { formatDateTime, inr, toTitle } from "@/lib/format";
 import { PageHeader, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -87,12 +88,14 @@ export default function ShopSubscriptionPage() {
               {sub.endDate && ` · Renews ${formatDateTime(sub.endDate)}`}
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setChangeOpen(true)}>Change plan</Button>
-            {sub.status === "ACTIVE" && (
-              <Button variant="destructive" onClick={() => setCancelOpen(true)}>Cancel</Button>
-            )}
-          </div>
+          <Can any={["SUBSCRIPTION_MANAGE"]}>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setChangeOpen(true)}>Change plan</Button>
+              {sub.status === "ACTIVE" && (
+                <Button variant="destructive" onClick={() => setCancelOpen(true)}>Cancel</Button>
+              )}
+            </div>
+          </Can>
         </CardContent>
       </Card>
 
@@ -173,9 +176,11 @@ function PlanCard({ plan, active, onChoose }: { plan: Plan; active: boolean; onC
           ))}
         </ul>
         {!active && (
-          <Button size="sm" variant="outline" className="w-full" onClick={onChoose}>
-            Choose plan
-          </Button>
+          <Can any={["SUBSCRIPTION_MANAGE"]}>
+            <Button size="sm" variant="outline" className="w-full" onClick={onChoose}>
+              Choose plan
+            </Button>
+          </Can>
         )}
       </CardContent>
     </Card>

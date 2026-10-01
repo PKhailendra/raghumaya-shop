@@ -274,6 +274,7 @@ const mapMember = (m: Record<string, any>): ShopMember => ({
 
 export const shopsApi = {
   myShops: () => get<Shop[]>("/shops"),
+  context: () => get<{ shop: Shop; membershipId: string; role: string; permissions: string[] }>("/shops/context"),
   get: (id: string) => get<Shop>(`/shops/${id}`),
   create: (body: Record<string, unknown>) => post<Shop>("/shops", body),
   update: (id: string, body: Record<string, unknown>) => patch<Shop>(`/shops/${id}`, body),
@@ -1189,4 +1190,109 @@ export const adminApi = {
 
   // Admin-side 2FA status (auth module, mirrored here for the security page)
   twoFactorStatus: () => get<{ enabled: boolean; methods: string[] }>("/auth/2fa/status"),
+};
+
+// ---------- HR: Attendance & Salary ----------
+export type AttendanceStatus = "PRESENT" | "ABSENT" | "HALF_DAY" | "PAID_LEAVE" | "WEEKLY_OFF";
+
+export type HrMember = {
+  membershipId: string;
+  accountId: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  role: string;
+};
+
+export type AttendanceDayRecord = {
+  id: string;
+  date: string;
+  status: AttendanceStatus;
+  notes?: string | null;
+};
+
+export type AttendanceDay = {
+  member: HrMember;
+  records: AttendanceDayRecord[];
+};
+
+export type SalaryStructure = {
+  id: string;
+  membershipId: string;
+  monthlySalary: string;
+  effectiveFrom: string;
+};
+
+export type SalaryAdvance = {
+  id: string;
+  membershipId: string;
+  amount: string;
+  advanceDate: string;
+  notes?: string | null;
+};
+
+export type SalarySlipPayment = {
+  id: string;
+  status: string;
+  paidAmount: string;
+  paidAt: string | null;
+  mode: string | null;
+};
+
+export type SalarySlip = {
+  member: HrMember;
+  year: number;
+  month: number;
+  monthlySalary: string;
+  totalDays: number;
+  presentDays: number;
+  absentDays: number;
+  halfDays: number;
+  leaveDays: number;
+  unmarkedDays: number;
+  grossPayable: string;
+  advances: string;
+  bonus: string;
+  deductions: string;
+  netPayable: string;
+  payment: SalarySlipPayment | null;
+};
+
+export type SalaryPaymentRecord = {
+  id: string;
+  membershipId: string;
+  memberName: string;
+  year: number;
+  month: number;
+  monthlySalary: string;
+  grossPayable: string;
+  advances: string;
+  bonus: string;
+  deductions: string;
+  netPayable: string;
+  paidAmount: string;
+  status: string;
+  mode: string | null;
+  notes: string | null;
+  paidAt: string | null;
+};
+
+export const hrApi = {
+  attendance: (params?: { date?: string; from?: string; to?: string; membershipId?: string }) =>
+    get<{ data: AttendanceDay[] }>("/hr/attendance", params),
+  markAttendance: (body: { date: string; records: { membershipId: string; status: AttendanceStatus; notes?: string }[] }) =>
+    post<{ data: { date: string; marked: number } }>("/hr/attendance", body),
+  salaryStructures: () => get<{ data: SalaryStructure[] }>("/hr/salary-structure"),
+  setSalaryStructure: (membershipId: string, body: { monthlySalary: string; effectiveFrom?: string }) =>
+    put<{ data: SalaryStructure }>(`/hr/salary-structure/${membershipId}`, body),
+  advances: (params?: { membershipId?: string; month?: number; year?: number }) =>
+    get<{ data: SalaryAdvance[] }>("/hr/advances", params),
+  recordAdvance: (body: { membershipId: string; amount: string; advanceDate?: string; notes?: string }) =>
+    post<{ data: SalaryAdvance }>("/hr/advances", body),
+  salarySlips: (params: { month: number; year: number }) =>
+    get<{ data: SalarySlip[] }>("/hr/salary", params),
+  salaryPayments: (params?: { month?: number; year?: number }) =>
+    get<{ data: SalaryPaymentRecord[] }>("/hr/salary/payments", params),
+  paySalary: (body: { membershipId: string; month: number; year: number; bonus?: string; deductions?: string; mode?: string; notes?: string }) =>
+    post<{ data: { id: string; memberName: string; year: number; month: number; netPayable: string; status: string } }>("/hr/salary/pay", body),
 };

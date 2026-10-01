@@ -4,6 +4,7 @@ import type React from "react";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { stockApi, ApiError, type Warehouse, type StockLevel } from "@/lib/api";
+import { Can } from "@/lib/shop-context";
 import { formatDateTime, toTitle } from "@/lib/format";
 import { PageHeader, ErrorState, EmptyState, TableSkeleton } from "@/components/states";
 import { Pagination } from "@/components/pagination";
@@ -58,14 +59,16 @@ export default function ShopStockPage() {
         title="Stock"
         description="Stock levels, movements and transfers."
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setWarehouseOpen(true)}>
-              <Plus className="h-4 w-4" /> Warehouse
-            </Button>
-            <Button onClick={() => setTransferOpen(true)}>
-              <ArrowRightLeft className="h-4 w-4" /> Transfer
-            </Button>
-          </div>
+          <Can any={["STOCK_ADJUST"]}>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setWarehouseOpen(true)}>
+                <Plus className="h-4 w-4" /> Warehouse
+              </Button>
+              <Button onClick={() => setTransferOpen(true)}>
+                <ArrowRightLeft className="h-4 w-4" /> Transfer
+              </Button>
+            </div>
+          </Can>
         }
       />
 

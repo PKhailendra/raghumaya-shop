@@ -30,7 +30,8 @@
     "resolve": "^1.22.12",
     "sucrase": "^3.35.1",
     "tailwind-merge": "^2.5.4",
-    "@raghumaya/shared": "*"
+    "@raghumaya/shared": "*",
+    "html5-qrcode": "^2.3.8"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",

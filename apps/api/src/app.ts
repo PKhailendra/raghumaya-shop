@@ -20,6 +20,7 @@ import subscriptionRoutes from './modules/subscriptions/subscriptions.routes';
 import referralRoutes from './modules/referrals/referrals.routes';
 import auditRoutes from './modules/audit/audit.routes';
 import notificationRoutes from './modules/notifications/notifications.routes';
+import hrRoutes from './modules/hr/hr.routes';
 import adminRoutes from './modules/admin/admin.routes';
 
 export function createApp() {
@@ -58,6 +59,7 @@ export function createApp() {
   v1.use('/referrals', referralRoutes);
   v1.use('/audit', auditRoutes);
   v1.use('/notifications', notificationRoutes);
+  v1.use('/hr', hrRoutes);
   v1.use('/admin', adminRoutes);
   app.use('/api/v1', v1);
 

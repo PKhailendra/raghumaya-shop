@@ -18,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SimpleLineChart } from "@/components/charts";
+import { Can } from "@/lib/shop-context";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
@@ -124,9 +125,11 @@ export default function ShopFinancePage() {
               <TabsTrigger key={k} value={k}>{KIND_META[k].title}</TabsTrigger>
             ))}
           </TabsList>
-          <Button size="sm" onClick={() => setEditor({})}>
-            <Plus className="h-4 w-4" /> Add {KIND_META[tab].singular.toLowerCase()}
-          </Button>
+          <Can any={["FINANCE_CREATE"]}>
+            <Button size="sm" onClick={() => setEditor({})}>
+              <Plus className="h-4 w-4" /> Add {KIND_META[tab].singular.toLowerCase()}
+            </Button>
+          </Can>
         </div>
 
         {(Object.keys(KIND_META) as EntryKind[]).map((k) => (

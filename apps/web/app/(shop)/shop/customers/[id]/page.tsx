@@ -11,12 +11,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Send, MessageCircle } from "lucide-react";
+import { Send, MessageCircle, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Can } from "@/lib/shop-context";
 
 export default function ShopCustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [note, setNote] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const customer = useQuery({ queryKey: ["shop", "customer", id], queryFn: () => customersApi.get(id) });
   const ledger = useQuery({ queryKey: ["shop", "customer", id, "ledger"], queryFn: () => customersApi.ledger(id) });
@@ -27,6 +32,12 @@ export default function ShopCustomerDetailPage() {
       kind === "sms" ? customersApi.sendSmsReminder(id) : customersApi.sendWhatsappReminder(id),
     onSuccess: (_, kind) => setNote(`Reminder sent via ${kind === "sms" ? "SMS" : "WhatsApp"}.`),
     onError: (err) => setNote(err instanceof ApiError ? err.message : "Could not send the reminder."),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => customersApi.remove(id),
+    onSuccess: () => router.replace("/shop/customers"),
+    onError: (err) => setNote(err instanceof ApiError ? err.message : "Could not delete the customer."),
   });
 
   if (customer.isLoading) {
@@ -68,8 +79,24 @@ export default function ShopCustomerDetailPage() {
             <Button size="sm" variant="outline" onClick={() => remind.mutate("whatsapp")} disabled={remind.isPending}>
               <MessageCircle className="h-3.5 w-3.5 mr-1" /> WhatsApp reminder
             </Button>
+            <Can any={["CUSTOMER_DELETE"]}>
+              <Button size="sm" variant="destructive" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+              </Button>
+            </Can>
           </div>
         }
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete customer?"
+        description={`This will permanently delete ${c.name}. Customers with invoices cannot be deleted.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => remove.mutate()}
+        busy={remove.isPending}
       />
 
       {note && <div className="mb-4 rounded-md border p-3 text-sm">{note}</div>}
