@@ -15,6 +15,7 @@
     "jsonwebtoken": "^9.0.2",
     "otplib": "^12.0.1",
     "pdfkit": "^0.16.0",
+    "tsx": "^4.23.15",
     "zod": "^3.23.8"
   },
   "description": "RaghuMayaShop backend API — Express + Prisma + PostgreSQL",
@@ -27,7 +28,6 @@
     "@types/node": "^20.16.0",
     "@types/pdfkit": "^0.17.0",
     "prisma": "^5.22.0",
-    "tsx": "^4.23.15",
     "typescript": "^5.5.4"
   },
   "engines": {
