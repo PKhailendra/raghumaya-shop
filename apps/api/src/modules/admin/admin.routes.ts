@@ -11,7 +11,7 @@ import {
   planCreateSchema,
   planUpdateSchema,
 } from '@raghumaya/shared';
-import { registerShopOwnerSchema } from '@raghumaya/shared';
+import { registerShopOwnerSchema, SHOP_TYPES } from '@raghumaya/shared';
 
 const r = Router();
 const uuidParam = z.object({ id: z.string().uuid() });
@@ -51,7 +51,7 @@ r.get('/referrals', c.listReferralsAdmin);
 r.get('/shops', validateRequest({ query: shopListQ }), c.listShops);
 r.post('/shop-owners', requireSuperAdmin, validateRequest({ body: registerShopOwnerSchema }), c.createShopOwner);
 r.get('/shops/:id', validateRequest({ params: uuidParam }), c.getShop);
-r.patch('/shops/:id', validateRequest({ params: uuidParam, body: z.object({ name: z.string().min(1).optional(), email: z.string().email().optional(), phone: z.string().optional(), address: z.string().optional(), city: z.string().optional(), state: z.string().optional(), pincode: z.string().optional(), gstNumber: z.string().optional() }).strict() }), c.updateShop);
+r.patch('/shops/:id', validateRequest({ params: uuidParam, body: z.object({ name: z.string().min(1).optional(), email: z.string().email().optional(), phone: z.string().optional(), address: z.string().optional(), city: z.string().optional(), state: z.string().optional(), pincode: z.string().optional(), gstNumber: z.string().optional(), shopType: z.enum(SHOP_TYPES).optional() }).strict() }), c.updateShop);
 r.post('/shops/:id/suspend', requireSuperAdmin, validateRequest({ params: uuidParam, body: z.object({ reason: z.string().optional() }) }), c.suspendShop);
 r.post('/shops/:id/reactivate', requireSuperAdmin, validateRequest({ params: uuidParam }), c.reactivateShop);
 r.delete('/shops/:id', requireSuperAdmin, validateRequest({ params: uuidParam }), c.deleteShop);
