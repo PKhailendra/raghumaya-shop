@@ -5,7 +5,7 @@ import { useMyShops } from '../src/api/shops';
 import { LoadingSpinner } from '../src/components/LoadingSpinner';
 import { ErrorState } from '../src/components/ErrorState';
 import { EmptyState } from '../src/components/EmptyState';
-import { getBaseUrl, ApiError } from '../src/api/client';
+import { ApiError } from '../src/api/client';
 import { theme } from '../src/theme';
 
 export default function SettingsScreen() {
@@ -70,7 +70,6 @@ export default function SettingsScreen() {
 
       <Text style={styles.sectionTitle}>App</Text>
       <View style={styles.card}>
-        <SettingRow label="API server" value={getBaseUrl()} />
         <SettingRow label="App version" value="1.0.0" />
       </View>
     </ScrollView>

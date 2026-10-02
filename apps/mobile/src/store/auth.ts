@@ -100,11 +100,19 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   applySession: async (accessToken, refreshToken, data) => {
+    // API returns `actor` (not `account`). Map actor -> account so the
+    // Settings screen can show name/email/phone.
+    const actor = (data as { actor?: { id?: string; fullName?: string; email?: string | null; phone?: string | null; activeShopId?: string } }).actor;
+    const account: Account | undefined = data.account ?? (actor ? {
+      id: actor.id ?? '',
+      name: actor.fullName ?? '',
+      email: actor.email ?? null,
+      phone: actor.phone ?? null,
+    } : undefined);
     // API returns `actor` (not `memberships`). Build a membership-like entry
     // from actor + /shops/context so permission checks (`can()`) work.
     let memberships: ShopMembership[] = data.memberships ?? [];
-    const actorShopId =
-      (data as { actor?: { activeShopId?: string } }).actor?.activeShopId ?? null;
+    const actorShopId = actor?.activeShopId ?? null;
     if (memberships.length === 0 && actorShopId) {
       try {
         const baseUrl =
@@ -137,11 +145,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     await Promise.all([
       SecureStore.setItemAsync(KEYS.accessToken, accessToken),
       SecureStore.setItemAsync(KEYS.refreshToken, refreshToken),
-      data.account ? SecureStore.setItemAsync(KEYS.account, JSON.stringify(data.account)) : Promise.resolve(),
+      account ? SecureStore.setItemAsync(KEYS.account, JSON.stringify(account)) : Promise.resolve(),
       SecureStore.setItemAsync(KEYS.memberships, JSON.stringify(memberships)),
       activeShopId ? SecureStore.setItemAsync(KEYS.activeShopId, activeShopId) : Promise.resolve(),
     ]);
-    set({ accessToken, refreshToken, account: data.account ?? get().account, memberships, activeShopId });
+    set({ accessToken, refreshToken, account: account ?? get().account, memberships, activeShopId });
   },
 
   switchShop: async (shopId) => {
