@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../src/store/auth';
 import { AppHeader } from '../../src/components/AppHeader';
 import { theme } from '../../src/theme';
+import { useLang } from '../../src/i18n';
 
 interface MenuItem {
   label: string;
@@ -16,13 +17,18 @@ export default function MoreScreen() {
   const account = useAuthStore((s) => s.account);
   const activeShop = useAuthStore((s) => s.activeShop)();
   const logout = useAuthStore((s) => s.logout);
+  const { lang, setLang, t } = useLang();
 
   const items: MenuItem[] = [
+    { label: t('Attendance'), sub: 'Mark daily staff attendance', route: '/attendance' },
+    { label: t('Salary'), sub: 'Salary slips, advances, payments', route: '/salary' },
+    { label: t('Expenses'), sub: 'Track shop spending', route: '/expenses' },
+    { label: t('Daily Closing'), sub: 'End-of-day sales summary', route: '/daily-closing' },
     { label: 'Stock alerts', sub: 'Low stock, out of stock, expiry', route: '/alerts' },
     { label: 'Finance summary', sub: 'Revenue, expenses, profit', route: '/finance' },
     { label: 'Team', sub: 'Shop members and roles', route: '/team' },
     { label: 'Subscription', sub: 'Plan and billing status', route: '/subscription' },
-    { label: 'Settings', sub: 'Account and app settings', route: '/settings' },
+    { label: t('Settings'), sub: 'Account and app settings', route: '/settings' },
   ];
 
   const confirmLogout = () => {
@@ -41,7 +47,7 @@ export default function MoreScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <AppHeader title="More" subtitle={account?.name ?? account?.email ?? ''} />
+      <AppHeader title={t('More')} subtitle={account?.name ?? account?.email ?? ''} />
 
       <View style={styles.shopCard}>
         <Text style={styles.shopLabel}>Active shop</Text>
@@ -51,6 +57,19 @@ export default function MoreScreen() {
           <Text style={styles.switchBtnText}>Switch shop</Text>
         </TouchableOpacity>
       </View>
+
+      <TouchableOpacity
+        style={styles.langRow}
+        onPress={() => setLang(lang === 'en' ? 'hi' : 'en')}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={styles.menuLabel}>{t('Language')}</Text>
+          <Text style={styles.menuSub}>
+            {lang === 'en' ? 'English — हिंदी में बदलें' : 'हिंदी — Switch to English'}
+          </Text>
+        </View>
+        <Text style={styles.langToggle}>{lang === 'en' ? 'हिंदी' : 'EN'}</Text>
+      </TouchableOpacity>
 
       {items.map((it) => (
         <TouchableOpacity
@@ -87,4 +106,6 @@ const styles = StyleSheet.create({
   chevron: { fontSize: 20, color: theme.colors.muted },
   logoutBtn: { margin: 16, backgroundColor: theme.colors.dangerBg, borderRadius: theme.radius.sm, paddingVertical: 14, alignItems: 'center' },
   logoutText: { color: theme.colors.danger, fontWeight: '700', fontSize: 15 },
+  langRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 16, paddingVertical: 14, marginHorizontal: 16, marginBottom: 12, borderRadius: theme.radius.md },
+  langToggle: { fontSize: 14, fontWeight: '700', color: theme.colors.primary, backgroundColor: theme.colors.primaryLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
 });

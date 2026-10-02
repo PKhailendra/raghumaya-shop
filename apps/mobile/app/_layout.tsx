@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '../src/store/auth';
 import { OfflineBanner } from '../src/components/OfflineBanner';
+import { LanguageProvider } from '../src/i18n';
 import { theme } from '../src/theme';
 
 const queryClient = new QueryClient({
@@ -56,6 +57,8 @@ function AuthGate() {
         <Stack.Screen name="alerts" options={{ headerShown: true, title: 'Stock Alerts' }} />
         <Stack.Screen name="finance" options={{ headerShown: true, title: 'Finance Summary' }} />
         <Stack.Screen name="team" options={{ headerShown: true, title: 'Team' }} />
+        <Stack.Screen name="expenses" options={{ headerShown: true, title: 'Expenses' }} />
+        <Stack.Screen name="daily-closing" options={{ headerShown: true, title: 'Daily Closing' }} />
         <Stack.Screen name="subscription" options={{ headerShown: true, title: 'Subscription' }} />
         <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings' }} />
       </Stack>
@@ -67,8 +70,10 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="dark" />
-        <AuthGate />
+        <LanguageProvider>
+          <StatusBar style="dark" />
+          <AuthGate />
+        </LanguageProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );
