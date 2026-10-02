@@ -13,21 +13,47 @@ export interface InvoiceFilters {
   page?: number;
 }
 
+/**
+ * Map the raw API invoice shape to the mobile Invoice type.
+ * API uses `totalAmount`; mobile UI expects `grandTotal` and `balanceDue`.
+ */
+function mapInvoice(raw: any): Invoice {
+  const total = raw.totalAmount ?? raw.grandTotal ?? '0';
+  const paid = raw.paidAmount ?? '0';
+  const balance =
+    raw.balanceDue ??
+    (isNaN(Number(total)) || isNaN(Number(paid)) ? '0' : String(Number(total) - Number(paid)));
+  return {
+    ...raw,
+    issueDate: raw.issueDate ?? raw.invoiceDate,
+    grandTotal: String(total),
+    paidAmount: String(paid),
+    balanceDue: String(balance),
+  };
+}
+
+function mapInvoiceList(raw: any): ListResponse<Invoice> {
+  return {
+    ...raw,
+    data: (raw.data ?? []).map(mapInvoice),
+  };
+}
+
 export function useInvoices(filters: InvoiceFilters = {}): UseQueryResult<ListResponse<Invoice>> {
   const { search, status, page = 1 } = filters;
   return useQuery({
     queryKey: ['invoices', search ?? '', status ?? '', page],
     queryFn: () =>
-      api<ListResponse<Invoice>>('/billing/invoices', {
+      api<any>('/billing/invoices', {
         query: { search, status, page },
-      }),
+      }).then(mapInvoiceList),
   });
 }
 
 export function useInvoice(id: string): UseQueryResult<Invoice> {
   return useQuery({
     queryKey: ['invoices', id],
-    queryFn: () => api<Invoice>(`/billing/invoices/${id}`),
+    queryFn: () => api<any>(`/billing/invoices/${id}`).then(mapInvoice),
     enabled: !!id,
   });
 }
