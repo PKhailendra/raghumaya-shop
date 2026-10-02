@@ -111,7 +111,7 @@ export default function InventoryScreen() {
         />
       )}
 
-      <TouchableOpacity style={styles.scanFab} onPress={() => router.push('/scan')}>
+      <TouchableOpacity style={styles.scanFab} onPress={() => router.push('/scan?mode=inventory')}>
         <Text style={styles.scanFabText}>📷 Scan</Text>
       </TouchableOpacity>
 

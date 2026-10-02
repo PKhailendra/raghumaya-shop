@@ -1,18 +1,23 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useRouter } from 'expo-router';
-import { useProductLookup } from '../src/api/products';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useProductLookup, useUpdateProduct } from '../src/api/products';
 import { useInvoiceBuilder } from '../src/store/invoiceBuilder';
 import { LoadingSpinner } from '../src/components/LoadingSpinner';
 import { Money } from '../src/components/Money';
+import { ApiError } from '../src/api/client';
 import { theme } from '../src/theme';
 
 export default function ScanScreen() {
   const router = useRouter();
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const isInventoryMode = mode === 'inventory';
   const [permission, requestPermission] = useCameraPermissions();
   const [code, setCode] = useState('');
   const [scanned, setScanned] = useState(false);
+  const [addQty, setAddQty] = useState('');
+  const updateProduct = useUpdateProduct();
 
   const lookup = useProductLookup('barcode', code);
   const addItemFromProduct = useInvoiceBuilder((s) => s.addItemFromProduct);
@@ -62,6 +67,14 @@ export default function ScanScreen() {
           ) : lookup.isError ? (
             <View style={styles.center}>
               <Text style={styles.subtitle}>No product found for this barcode.</Text>
+              {isInventoryMode ? (
+                <Text
+                  style={[styles.button, styles.addToBill]}
+                  onPress={() => router.push(`/inventory/product-form?barcode=${encodeURIComponent(code)}`)}
+                >
+                  + Create new product
+                </Text>
+              ) : null}
               <Text style={styles.button} onPress={reset}>Scan again</Text>
             </View>
           ) : lookup.data ? (
@@ -70,20 +83,64 @@ export default function ScanScreen() {
               <Text style={styles.meta}>{lookup.data.sku ?? 'No SKU'}</Text>
               <Money value={lookup.data.sellingPrice} style={styles.price} />
               <Text style={styles.meta}>Stock: {lookup.data.currentStock}</Text>
-              <Text
-                style={[styles.button, styles.addToBill]}
-                onPress={() => {
-                  const p = lookup.data;
-                  addItemFromProduct(p);
-                  Alert.alert('Added ✓', `${p.name} added to the bill. Scan next item or go to bill.`, [
-                    { text: 'Scan more', style: 'cancel', onPress: reset },
-                    { text: 'Go to Bill', onPress: () => router.push('/billing/new') },
-                  ]);
-                }}
-              >
-                Add to Bill
-              </Text>
-              <Text style={styles.button} onPress={() => router.push('/billing/new')}>Go to Bill</Text>
+              {isInventoryMode ? (
+                <>
+                  <Text style={styles.label}>Add stock quantity</Text>
+                  <TextInput
+                    style={styles.qtyInput}
+                    value={addQty}
+                    onChangeText={setAddQty}
+                    placeholder="e.g. 10"
+                    placeholderTextColor={theme.colors.muted}
+                    keyboardType="decimal-pad"
+                  />
+                  <Text
+                    style={[styles.button, styles.addToBill]}
+                    onPress={() => {
+                      const qty = parseFloat(addQty);
+                      if (Number.isNaN(qty) || qty <= 0) {
+                        Alert.alert('Invalid quantity', 'Enter a valid quantity to add.');
+                        return;
+                      }
+                      const p = lookup.data;
+                      const newStock = (parseFloat(p.currentStock ?? '0') + qty).toFixed(3);
+                      updateProduct.mutate(
+                        { id: p.id, payload: { currentStock: newStock } },
+                        {
+                          onSuccess: () => {
+                            Alert.alert('Stock updated ✓', `${p.name}: +${qty} (now ${newStock})`, [
+                              { text: 'Scan more', style: 'cancel', onPress: () => { setAddQty(''); reset(); } },
+                              { text: 'Done', onPress: () => router.back() },
+                            ]);
+                          },
+                          onError: (e) => {
+                            Alert.alert('Failed', e instanceof ApiError ? e.message : 'Could not update stock.');
+                          },
+                        },
+                      );
+                    }}
+                  >
+                    {updateProduct.isPending ? 'Updating…' : '+ Add Stock'}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text
+                    style={[styles.button, styles.addToBill]}
+                    onPress={() => {
+                      const p = lookup.data;
+                      addItemFromProduct(p);
+                      Alert.alert('Added ✓', `${p.name} added to the bill. Scan next item or go to bill.`, [
+                        { text: 'Scan more', style: 'cancel', onPress: reset },
+                        { text: 'Go to Bill', onPress: () => router.push('/billing/new') },
+                      ]);
+                    }}
+                  >
+                    Add to Bill
+                  </Text>
+                  <Text style={styles.button} onPress={() => router.push('/billing/new')}>Go to Bill</Text>
+                </>
+              )}
               <Text style={[styles.button, styles.secondary]} onPress={reset}>Scan again</Text>
             </View>
           ) : null}
@@ -110,4 +167,6 @@ const styles = StyleSheet.create({
   button: { marginTop: 16, backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, paddingVertical: 12, paddingHorizontal: 24, color: '#fff', fontWeight: '700', fontSize: 15, textAlign: 'center', overflow: 'hidden' },
   addToBill: { backgroundColor: theme.colors.success },
   secondary: { backgroundColor: theme.colors.mutedBg, color: theme.colors.text },
+  label: { fontSize: 13, fontWeight: '600', color: theme.colors.subtext, marginTop: 12, marginBottom: 6 },
+  qtyInput: { backgroundColor: theme.colors.background, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, padding: 12, fontSize: 16, color: theme.colors.text },
 });
