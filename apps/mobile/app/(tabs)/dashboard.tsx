@@ -34,10 +34,16 @@ export default function DashboardScreen() {
       map.set(s.date.slice(0, 10), parseFloat(s.total));
     }
     const out: BarDatum[] = [];
+    const todayKey = format(new Date(), 'yyyy-MM-dd');
     for (let i = 13; i >= 0; i--) {
       const d = subDays(new Date(), i);
       const key = format(d, 'yyyy-MM-dd');
-      out.push({ label: format(d, 'd MMM'), value: map.get(key) ?? 0 });
+      out.push({
+        label: format(d, 'd MMM'),
+        shortLabel: format(d, 'd'),
+        value: map.get(key) ?? 0,
+        isToday: key === todayKey,
+      });
     }
     return out;
   }, [sales.data]);
