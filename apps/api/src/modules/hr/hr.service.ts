@@ -368,6 +368,13 @@ export async function paySalary(
   const deductions = Number(input.deductions ?? 0);
   const net = Math.max(0, Math.round((Number(slip.netPayable) + bonus - deductions) * 100) / 100);
 
+  // Carry forward excess advance to next month (user requirement 2026-10-02):
+  // if advances exceed the gross payable, the remainder becomes an advance
+  // for the following month instead of being forgiven.
+  const gross = Number(slip.grossPayable);
+  const totalAdv = Number(slip.advances);
+  const excess = Math.round((totalAdv - gross) * 100) / 100;
+
   const rec = await prisma.salaryPayment.create({
     data: {
       shopId,
@@ -393,6 +400,24 @@ export async function paySalary(
       notes: input.notes,
     },
   });
+
+  let carriedForward = 0;
+  if (excess > 0) {
+    const nextMonth = input.month === 12 ? 1 : input.month + 1;
+    const nextYear = input.month === 12 ? input.year + 1 : input.year;
+    await prisma.salaryAdvance.create({
+      data: {
+        shopId,
+        membershipId: input.membershipId,
+        amount: D(excess.toFixed(2)),
+        advanceDate: new Date(Date.UTC(nextYear, nextMonth - 1, 1)),
+        notes: `Carried forward from ${input.year}-${String(input.month).padStart(2, '0')} (advance exceeded gross)`,
+        givenById: paidById,
+      },
+    });
+    carriedForward = excess;
+  }
+
   return {
     id: rec.id,
     memberName: slip.member.name,
@@ -400,6 +425,7 @@ export async function paySalary(
     month: rec.month,
     netPayable: rec.netPayable.toString(),
     status: rec.status,
+    carriedForward: carriedForward.toFixed(2),
   };
 }
 

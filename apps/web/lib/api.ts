@@ -1294,5 +1294,5 @@ export const hrApi = {
   salaryPayments: (params?: { month?: number; year?: number }) =>
     get<{ data: SalaryPaymentRecord[] }>("/hr/salary/payments", params),
   paySalary: (body: { membershipId: string; month: number; year: number; bonus?: string; deductions?: string; mode?: string; notes?: string }) =>
-    post<{ data: { id: string; memberName: string; year: number; month: number; netPayable: string; status: string } }>("/hr/salary/pay", body),
+    post<{ data: { id: string; memberName: string; year: number; month: number; netPayable: string; status: string; carriedForward: string } }>("/hr/salary/pay", body),
 };

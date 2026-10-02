@@ -32,6 +32,7 @@ export default function ShopSalaryPage() {
   const [salaryFor, setSalaryFor] = useState<{ membershipId: string; name: string; current?: string } | null>(null);
   const [advanceFor, setAdvanceFor] = useState<{ membershipId: string; name: string } | null>(null);
   const [payFor, setPayFor] = useState<{ membershipId: string; name: string; net: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [year, month] = useMemo(() => {
     const [y, m] = monthStr.split("-").map(Number);
@@ -92,6 +93,13 @@ export default function ShopSalaryPage() {
           </div>
         }
       />
+
+      {notice && (
+        <div className="mb-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800 flex justify-between items-center">
+          <span>{notice}</span>
+          <button onClick={() => setNotice(null)} className="text-blue-600 hover:text-blue-800">✕</button>
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-3 gap-3">
         <Card>
@@ -260,7 +268,13 @@ export default function ShopSalaryPage() {
           month={month}
           year={year}
           onClose={() => setPayFor(null)}
-          onDone={() => { setPayFor(null); invalidate(); }}
+          onDone={(carried) => {
+            setPayFor(null);
+            invalidate();
+            if (carried && Number(carried) > 0) {
+              setNotice(`₹${carried} excess advance carried forward to next month.`);
+            }
+          }}
         />
       )}
     </div>
@@ -369,7 +383,7 @@ function AdvanceDialog({ membershipId, name, onClose, onDone }: { membershipId: 
   );
 }
 
-function PayDialog({ membershipId, name, net, month, year, onClose, onDone }: { membershipId: string; name: string; net: string; month: number; year: number; onClose: () => void; onDone: () => void }) {
+function PayDialog({ membershipId, name, net, month, year, onClose, onDone }: { membershipId: string; name: string; net: string; month: number; year: number; onClose: () => void; onDone: (carried?: string) => void }) {
   const [bonus, setBonus] = useState("");
   const [deductions, setDeductions] = useState("");
   const [mode, setMode] = useState("");
@@ -381,12 +395,12 @@ function PayDialog({ membershipId, name, net, month, year, onClose, onDone }: { 
     e.preventDefault();
     setBusy(true);
     try {
-      await hrApi.paySalary({
+      const res = await hrApi.paySalary({
         membershipId, month, year,
         bonus: bonus || undefined, deductions: deductions || undefined,
         mode: mode || undefined, notes: notes || undefined,
       });
-      onDone();
+      onDone(res.data?.carriedForward);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not record payment.");
     } finally {
