@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Alert,
   FlatList,
@@ -36,8 +36,15 @@ function localToday(): string {
 export default function ExpensesScreen() {
   const [category, setCategory] = useState<string | undefined>(undefined);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [monthStr, setMonthStr] = useState(localToday().slice(0, 7));
   const [formOpen, setFormOpen] = useState(false);
+
+  // Debounce search to avoid API spam
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const now = new Date();
   const [yr, mo] = monthStr.split('-').map(Number);
@@ -47,7 +54,7 @@ export default function ExpensesScreen() {
   const lastDay = new Date(year, month, 0).getDate();
   const toDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
 
-  const list = useExpenses({ category, search: search || undefined, fromDate, toDate });
+  const list = useExpenses({ category, search: debouncedSearch || undefined, fromDate, toDate });
   const summary = useExpenseSummary(year, month);
   const del = useDeleteExpense();
 
@@ -68,9 +75,27 @@ export default function ExpensesScreen() {
   if (list.isError)
     return <ErrorState message="Could not load expenses." onRetry={() => list.refetch()} />;
 
+  const shiftMonth = (delta: number) => {
+    const d = new Date(year, month - 1 + delta, 1);
+    setMonthStr(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  };
+
   return (
     <View style={styles.container}>
       <AppHeader title="Expenses" subtitle="Track shop spending" />
+      <View style={styles.monthNav}>
+        <TouchableOpacity style={styles.monthBtn} onPress={() => shiftMonth(-1)}>
+          <Text style={styles.monthBtnText}>‹ Prev</Text>
+        </TouchableOpacity>
+        <Text style={styles.monthLabel}>{monthStr}</Text>
+        <TouchableOpacity
+          style={styles.monthBtn}
+          onPress={() => shiftMonth(1)}
+          disabled={monthStr >= localToday().slice(0, 7)}
+        >
+          <Text style={[styles.monthBtnText, monthStr >= localToday().slice(0, 7) && styles.monthBtnDisabled]}>Next ›</Text>
+        </TouchableOpacity>
+      </View>
       <TouchableOpacity style={styles.addBtnTop} onPress={() => setFormOpen(true)}>
         <Text style={styles.addBtnText}>+ Add expense</Text>
       </TouchableOpacity>
@@ -151,6 +176,7 @@ function ExpenseFormModal({ visible, onClose }: { visible: boolean; onClose: () 
   const submit = () => {
     if (!title.trim()) return setError('Enter a title.');
     if (!amount || Number(amount) <= 0) return setError('Enter a valid amount.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return setError('Enter a valid date (YYYY-MM-DD).');
     if (date > localToday()) return setError('Date cannot be in the future.');
     setError(null);
     create.mutate(
@@ -235,6 +261,11 @@ function ExpenseFormModal({ visible, onClose }: { visible: boolean; onClose: () 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
   addBtnTop: { marginHorizontal: 16, marginBottom: 4, backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, paddingVertical: 12, alignItems: 'center' },
+  monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16, marginBottom: 8 },
+  monthBtn: { paddingVertical: 8, paddingHorizontal: 12 },
+  monthBtnText: { fontSize: 14, color: theme.colors.primary, fontWeight: '600' },
+  monthBtnDisabled: { color: theme.colors.muted },
+  monthLabel: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
   addBtn: { backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, paddingHorizontal: 14, paddingVertical: 8 },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   summaryCard: { backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: 16, margin: 16, marginBottom: 8, alignItems: 'center' },

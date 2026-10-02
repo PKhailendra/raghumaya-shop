@@ -31,9 +31,10 @@ export interface DailyClosing {
 }
 
 export function useDailyClosing(date: string): UseQueryResult<DailyClosing> {
+  const isValid = /^\d{4}-\d{2}-\d{2}$/.test(date);
   return useQuery({
     queryKey: ['reports', 'daily-closing', date],
     queryFn: () => api<DailyClosing>('/reports/daily-closing', { query: { date } }),
-    enabled: !!date,
+    enabled: isValid,
   });
 }

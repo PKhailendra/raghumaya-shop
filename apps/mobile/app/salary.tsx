@@ -73,7 +73,7 @@ export default function SalaryScreen() {
     [members.data]
   );
 
-  const handlePay = (bonus: string, deductions: string) => {
+  const handlePay = (bonus: string, deductions: string, mode: string) => {
     if (!selected) return;
     if (bonus && Number(bonus) < 0) {
       Alert.alert('Invalid', 'Bonus cannot be negative.');
@@ -90,7 +90,7 @@ export default function SalaryScreen() {
         month,
         bonus: bonus || undefined,
         deductions: deductions || undefined,
-        mode: 'CASH',
+        mode,
       },
       {
         onSuccess: (res) => {
@@ -162,8 +162,12 @@ export default function SalaryScreen() {
           <Text style={styles.dateBtnText}>‹ Prev</Text>
         </TouchableOpacity>
         <Text style={styles.dateText}>{monthLabel(year, month)}</Text>
-        <TouchableOpacity style={styles.dateBtn} onPress={() => changeMonth(1)}>
-          <Text style={styles.dateBtnText}>Next ›</Text>
+        <TouchableOpacity
+          style={styles.dateBtn}
+          onPress={() => changeMonth(1)}
+          disabled={year === new Date().getFullYear() && month === new Date().getMonth() + 1}
+        >
+          <Text style={[styles.dateBtnText, year === new Date().getFullYear() && month === new Date().getMonth() + 1 && styles.dateBtnDisabled]}>Next ›</Text>
         </TouchableOpacity>
       </View>
 
@@ -290,12 +294,18 @@ function PayForm({
 }: {
   slip: SalarySlip | null;
   onCancel: () => void;
-  onPay: (bonus: string, deductions: string) => void;
+  onPay: (bonus: string, deductions: string, mode: string) => void;
   busy: boolean;
 }) {
   const [bonus, setBonus] = useState('');
   const [deductions, setDeductions] = useState('');
-  const net = slip ? Math.max(0, Number(slip.netPayable) + Number(bonus || 0) - Number(deductions || 0)) : 0;
+  const [mode, setMode] = useState('CASH');
+  const MODES = ['CASH', 'UPI', 'CARD', 'BANK_TRANSFER'];
+  const bonusNum = bonus === '' ? 0 : Number(bonus);
+  const dedNum = deductions === '' ? 0 : Number(deductions);
+  const net = slip && !isNaN(bonusNum) && !isNaN(dedNum)
+    ? Math.max(0, Number(slip.netPayable) + bonusNum - dedNum)
+    : (slip ? Number(slip.netPayable) : 0);
   return (
     <View style={styles.modalBg}>
       <View style={styles.modal}>
@@ -319,6 +329,18 @@ function PayForm({
           onChangeText={setDeductions}
           placeholder="0"
         />
+        <Text style={styles.inputLabel}>Payment mode</Text>
+        <View style={styles.modeRow}>
+          {MODES.map((m) => (
+            <TouchableOpacity
+              key={m}
+              style={[styles.modeChip, mode === m && styles.modeChipActive]}
+              onPress={() => setMode(m)}
+            >
+              <Text style={[styles.modeChipText, mode === m && styles.modeChipTextActive]}>{m}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         <Text style={styles.preview}>Payable: {inr(net)}</Text>
         <View style={styles.modalBtns}>
           <TouchableOpacity style={styles.modalCancel} onPress={onCancel}>
@@ -326,7 +348,7 @@ function PayForm({
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.modalPrimary, busy && styles.btnDisabled]}
-            onPress={() => onPay(bonus, deductions)}
+            onPress={() => onPay(bonus, deductions, mode)}
             disabled={busy}
           >
             <Text style={styles.modalPrimaryText}>{busy ? 'Paying…' : 'Confirm pay'}</Text>
@@ -415,6 +437,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   dateBtnText: { fontSize: 14, fontWeight: '600', color: theme.colors.primary },
+  dateBtnDisabled: { color: theme.colors.muted },
   dateText: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
   actionsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 12 },
   actionBtn: {
@@ -492,6 +515,11 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   preview: { fontSize: 16, fontWeight: '700', color: theme.colors.primary, marginTop: 12 },
+  modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  modeChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border },
+  modeChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  modeChipText: { fontSize: 12, color: theme.colors.text },
+  modeChipTextActive: { color: '#fff', fontWeight: '600' },
   pickerList: { maxHeight: 160, marginBottom: 8 },
   pickerRow: {
     paddingVertical: 10,

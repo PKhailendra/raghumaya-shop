@@ -26,6 +26,21 @@ const STRINGS: Record<string, { en: string; hi: string }> = {
   'Salary Paid': { en: 'Salary Paid', hi: 'तनख्वाह दी' },
   'Net Cash': { en: 'Net Cash', hi: 'शुद्ध नकद' },
   Language: { en: 'Language', hi: 'भाषा' },
+  Present: { en: 'Present', hi: 'उपस्थित' },
+  Absent: { en: 'Absent', hi: 'अनुपस्थित' },
+  'Half day': { en: 'Half day', hi: 'आधा दिन' },
+  Leave: { en: 'Leave', hi: 'छुट्टी' },
+  'Weekly off': { en: 'Weekly off', hi: 'साप्ताहिक छुट्टी' },
+  'All present': { en: 'All present', hi: 'सब उपस्थित' },
+  'Mark attendance': { en: 'Mark attendance', hi: 'हाज़िरी लगाएं' },
+  'Pay salary': { en: 'Pay salary', hi: 'तनख्वाह दें' },
+  Bonus: { en: 'Bonus', hi: 'बोनस' },
+  Deductions: { en: 'Deductions', hi: 'कटौती' },
+  'Payment mode': { en: 'Payment mode', hi: 'भुगतान का तरीका' },
+  'Add expense': { en: 'Add expense', hi: 'खर्चा जोड़ें' },
+  Amount: { en: 'Amount', hi: 'राशि' },
+  Date: { en: 'Date', hi: 'तारीख' },
+  'No data': { en: 'No data', hi: 'कोई डेटा नहीं' },
 };
 
 const LANG_KEY = 'rms-lang';

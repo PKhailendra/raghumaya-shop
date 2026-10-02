@@ -5,31 +5,33 @@ import { AppHeader } from '../../src/components/AppHeader';
 import { theme } from '../../src/theme';
 import { useLang } from '../../src/i18n';
 
-interface MenuItem {
-  label: string;
-  sub?: string;
-  route?: string;
-  action?: () => void;
-}
-
 export default function MoreScreen() {
   const router = useRouter();
   const account = useAuthStore((s) => s.account);
   const activeShop = useAuthStore((s) => s.activeShop)();
   const logout = useAuthStore((s) => s.logout);
   const { lang, setLang, t } = useLang();
+  const can = useAuthStore((s) => s.can);
+
+  interface MenuItem {
+    label: string;
+    sub?: string;
+    route?: string;
+    permission?: string;
+    action?: () => void;
+  }
 
   const items: MenuItem[] = [
-    { label: t('Attendance'), sub: 'Mark daily staff attendance', route: '/attendance' },
-    { label: t('Salary'), sub: 'Salary slips, advances, payments', route: '/salary' },
-    { label: t('Expenses'), sub: 'Track shop spending', route: '/expenses' },
-    { label: t('Daily Closing'), sub: 'End-of-day sales summary', route: '/daily-closing' },
-    { label: 'Stock alerts', sub: 'Low stock, out of stock, expiry', route: '/alerts' },
-    { label: 'Finance summary', sub: 'Revenue, expenses, profit', route: '/finance' },
-    { label: 'Team', sub: 'Shop members and roles', route: '/team' },
-    { label: 'Subscription', sub: 'Plan and billing status', route: '/subscription' },
-    { label: t('Settings'), sub: 'Account and app settings', route: '/settings' },
-  ];
+    { label: t('Attendance'), sub: 'Mark daily staff attendance', route: '/attendance', permission: 'ATTENDANCE_VIEW' },
+    { label: t('Salary'), sub: 'Salary slips, advances, payments', route: '/salary', permission: 'SALARY_VIEW' },
+    { label: t('Expenses'), sub: 'Track shop spending', route: '/expenses', permission: 'FINANCE_VIEW' },
+    { label: t('Daily Closing'), sub: 'End-of-day sales summary', route: '/daily-closing', permission: 'ANALYTICS_VIEW' },
+    { label: 'Stock alerts', sub: 'Low stock, out of stock, expiry', route: '/alerts', permission: 'STOCK_VIEW' },
+    { label: 'Finance summary', sub: 'Revenue, expenses, profit', route: '/finance', permission: 'FINANCE_VIEW' },
+    { label: 'Team', sub: 'Shop members and roles', route: '/team', permission: 'EMPLOYEE_VIEW' },
+    { label: 'Subscription', sub: 'Plan and billing status', route: '/subscription', permission: 'SUBSCRIPTION_VIEW' },
+    { label: t('Settings'), sub: 'Account and app settings', route: '/settings', permission: 'SETTINGS_VIEW' },
+  ].filter((it) => !it.permission || can(it.permission));
 
   const confirmLogout = () => {
     Alert.alert('Log out', 'Are you sure you want to log out?', [
@@ -73,7 +75,7 @@ export default function MoreScreen() {
 
       {items.map((it) => (
         <TouchableOpacity
-          key={it.label}
+          key={it.route ?? it.label}
           style={styles.menuRow}
           onPress={() => it.route && router.push(it.route as never)}
         >

@@ -29,6 +29,7 @@ interface AuthState {
   logout: () => Promise<void>;
   clearAuth: () => Promise<void>;
   activeShop: () => Shop | null;
+  can: (permission: string) => boolean;
 }
 
 function activeShopFrom(memberships: ShopMembership[], activeShopId: string | null): Shop | null {
@@ -151,4 +152,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   activeShop: () => activeShopFrom(get().memberships, get().activeShopId),
+  can: (permission: string) => {
+    const { memberships, activeShopId } = get();
+    const m = memberships.find((x) => x.shopId === activeShopId) ?? memberships[0];
+    if (!m) return false;
+    if (m.role === 'OWNER') return true;
+    return (m.permissions ?? []).includes(permission);
+  },
 }));

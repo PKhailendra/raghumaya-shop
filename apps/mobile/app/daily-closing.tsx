@@ -28,6 +28,16 @@ export default function DailyClosingScreen() {
     else if (v.length < 10) setDate(v); // allow typing in progress
   };
 
+  const isValidDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
+
+  if (!isValidDate)
+    return (
+      <View style={styles.container}>
+        <AppHeader title="Daily Closing" subtitle="Enter a date" />
+        <EmptyState title="No date" message="Type a valid date (YYYY-MM-DD) to view the report." />
+      </View>
+    );
+
   if (report.isLoading) return <LoadingSpinner />;
   if (report.isError || !report.data)
     return <ErrorState message="Could not load the daily closing report." onRetry={() => report.refetch()} />;

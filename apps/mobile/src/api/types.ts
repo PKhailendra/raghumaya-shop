@@ -58,6 +58,7 @@ export interface ShopMembership {
   shop?: Shop;
   role: string;
   status: string;
+  permissions?: string[];
 }
 
 export interface ShopMember {
