@@ -19,6 +19,7 @@ const STRINGS: Record<string, { en: string; hi: string }> = {
   Settings: { en: "Settings", hi: "सेटिंग्स" },
   Expenses: { en: "Expenses", hi: "खर्चे" },
   Reports: { en: "Reports", hi: "रिपोर्ट" },
+  "Daily Closing": { en: "Daily Closing", hi: "दिन का हिसाब" },
   Save: { en: "Save", hi: "सेव करें" },
   Cancel: { en: "Cancel", hi: "रद्द करें" },
   Delete: { en: "Delete", hi: "हटाएं" },
