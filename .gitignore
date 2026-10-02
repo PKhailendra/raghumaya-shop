@@ -11,3 +11,4 @@ build/
 coverage/
 prisma/migrations/dev/
 apps/mobile/package-lock.json
+tsconfig.tsbuildinfo
