@@ -22,7 +22,11 @@ import { theme } from '../../src/theme';
 
 export default function ProductFormScreen() {
   const router = useRouter();
-  const { id, barcode: barcodeParam } = useLocalSearchParams<{ id?: string; barcode?: string }>();
+  const { id, barcode: barcodeParam, name: nameParam } = useLocalSearchParams<{
+    id?: string;
+    barcode?: string;
+    name?: string;
+  }>();
   const isEdit = !!id;
 
   const { data: existing, isLoading } = useProduct(id ?? '');
@@ -45,10 +49,12 @@ export default function ProductFormScreen() {
 
   // Prefill barcode from scan (new product flow)
   useEffect(() => {
-    if (!isEdit && barcodeParam && !initialized) {
-      setBarcode(barcodeParam);
+    if (!isEdit && !initialized) {
+      if (barcodeParam) setBarcode(barcodeParam);
+      if (nameParam) setName(nameParam);
+      if (barcodeParam || nameParam) setInitialized(true);
     }
-  }, [isEdit, barcodeParam, initialized]);
+  }, [isEdit, barcodeParam, nameParam, initialized]);
   useEffect(() => {
     if (isEdit && existing && !initialized) {
       setName(existing.name ?? '');

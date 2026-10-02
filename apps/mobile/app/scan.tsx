@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -21,6 +21,50 @@ export default function ScanScreen() {
 
   const lookup = useProductLookup('barcode', code);
   const addItemFromProduct = useInvoiceBuilder((s) => s.addItemFromProduct);
+
+  // External barcode database lookup (OpenFoodFacts) — only in inventory mode
+  // when the product is not in own inventory
+  const [extLoading, setExtLoading] = useState(false);
+  const [extProduct, setExtProduct] = useState<{
+    name?: string;
+    brand?: string;
+    quantity?: string;
+    imageUrl?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isInventoryMode || !lookup.isError || !code) {
+      setExtProduct(null);
+      return;
+    }
+    let cancelled = false;
+    setExtLoading(true);
+    fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        if (d?.status === 1 && d?.product) {
+          const p = d.product;
+          setExtProduct({
+            name: p.product_name ?? p.product_name_en,
+            brand: p.brands,
+            quantity: p.quantity,
+            imageUrl: p.image_url,
+          });
+        } else {
+          setExtProduct(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setExtProduct(null);
+      })
+      .finally(() => {
+        if (!cancelled) setExtLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isInventoryMode, lookup.isError, code]);
 
   if (!permission) return <LoadingSpinner />;
   if (!permission.granted) {
@@ -66,14 +110,41 @@ export default function ScanScreen() {
             <LoadingSpinner />
           ) : lookup.isError ? (
             <View style={styles.center}>
-              <Text style={styles.subtitle}>No product found for this barcode.</Text>
+              <Text style={styles.subtitle}>No product found in your inventory.</Text>
               {isInventoryMode ? (
-                <Text
-                  style={[styles.button, styles.addToBill]}
-                  onPress={() => router.push(`/inventory/product-form?barcode=${encodeURIComponent(code)}`)}
-                >
-                  + Create new product
-                </Text>
+                extLoading ? (
+                  <LoadingSpinner />
+                ) : extProduct?.name ? (
+                  <View style={styles.card}>
+                    <Text style={styles.extLabel}>Found online — tap to use:</Text>
+                    <Text style={styles.productName}>{extProduct.name}</Text>
+                    {extProduct.brand ? <Text style={styles.meta}>Brand: {extProduct.brand}</Text> : null}
+                    {extProduct.quantity ? <Text style={styles.meta}>Pack: {extProduct.quantity}</Text> : null}
+                    <Text
+                      style={[styles.button, styles.addToBill]}
+                      onPress={() =>
+                        router.push(
+                          `/inventory/product-form?barcode=${encodeURIComponent(code)}&name=${encodeURIComponent(extProduct.name ?? '')}&brand=${encodeURIComponent(extProduct.brand ?? '')}`,
+                        )
+                      }
+                    >
+                      ✓ Use these details
+                    </Text>
+                    <Text
+                      style={styles.button}
+                      onPress={() => router.push(`/inventory/product-form?barcode=${encodeURIComponent(code)}`)}
+                    >
+                      + Create manually
+                    </Text>
+                  </View>
+                ) : (
+                  <Text
+                    style={[styles.button, styles.addToBill]}
+                    onPress={() => router.push(`/inventory/product-form?barcode=${encodeURIComponent(code)}`)}
+                  >
+                    + Create new product
+                  </Text>
+                )
               ) : null}
               <Text style={styles.button} onPress={reset}>Scan again</Text>
             </View>
@@ -169,4 +240,5 @@ const styles = StyleSheet.create({
   secondary: { backgroundColor: theme.colors.mutedBg, color: theme.colors.text },
   label: { fontSize: 13, fontWeight: '600', color: theme.colors.subtext, marginTop: 12, marginBottom: 6 },
   qtyInput: { backgroundColor: theme.colors.background, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, padding: 12, fontSize: 16, color: theme.colors.text },
+  extLabel: { fontSize: 13, fontWeight: '600', color: theme.colors.success, marginBottom: 8 },
 });
