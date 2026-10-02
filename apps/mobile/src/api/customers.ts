@@ -27,7 +27,10 @@ export function useCustomer(id: string): UseQueryResult<Customer> {
 export function useDuePayments(): UseQueryResult<Invoice[]> {
   return useQuery({
     queryKey: ['customers', 'due-payments'],
-    queryFn: () => api<Invoice[]>('/customers/due-payments'),
+    queryFn: async () => {
+      const res = await api<{ data: Invoice[] } | Invoice[]>('/customers/due-payments');
+      return Array.isArray(res) ? res : (res.data ?? []);
+    },
   });
 }
 
@@ -42,7 +45,10 @@ export function useCustomerLedger(id: string): UseQueryResult<CustomerLedger> {
 export function useCustomerInvoices(id: string): UseQueryResult<Invoice[]> {
   return useQuery({
     queryKey: ['customers', id, 'invoices'],
-    queryFn: () => api<Invoice[]>(`/customers/${id}/purchases`),
+    queryFn: async () => {
+      const res = await api<{ data: Invoice[] } | Invoice[]>(`/customers/${id}/purchases`);
+      return Array.isArray(res) ? res : (res.data ?? []);
+    },
     enabled: !!id,
   });
 }

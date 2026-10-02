@@ -67,10 +67,10 @@ export default function DashboardScreen() {
         <Text style={styles.cardTitle}>Top products</Text>
         {topProducts.isLoading ? (
           <LoadingSpinner />
-        ) : (topProducts.data?.data ?? []).length === 0 ? (
+        ) : (topProducts.data ?? []).length === 0 ? (
           <EmptyState title="No product data" message="Top products will appear once sales are recorded." />
         ) : (
-          (topProducts.data?.data ?? []).map((p) => (
+          (topProducts.data ?? []).map((p) => (
             <View key={p.productId} style={styles.topRow}>
               <Text style={styles.topName} numberOfLines={1}>{p.productName}</Text>
               <Text style={styles.topQty}>×{p.quantity}</Text>

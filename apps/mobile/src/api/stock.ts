@@ -20,13 +20,19 @@ export function useStockMovements(page = 1): UseQueryResult<ListResponse<StockMo
 export function useLowStockAlerts(): UseQueryResult<LowStockAlert[]> {
   return useQuery({
     queryKey: ['stock', 'alerts', 'low-stock'],
-    queryFn: () => api<LowStockAlert[]>('/stock/alerts/low-stock'),
+    queryFn: async () => {
+      const res = await api<{ data: LowStockAlert[] } | LowStockAlert[]>('/stock/alerts/low-stock');
+      return Array.isArray(res) ? res : (res.data ?? []);
+    },
   });
 }
 
 export function useOutOfStockAlerts(): UseQueryResult<LowStockAlert[]> {
   return useQuery({
     queryKey: ['stock', 'alerts', 'out-of-stock'],
-    queryFn: () => api<LowStockAlert[]>('/stock/alerts/out-of-stock'),
+    queryFn: async () => {
+      const res = await api<{ data: LowStockAlert[] } | LowStockAlert[]>('/stock/alerts/out-of-stock');
+      return Array.isArray(res) ? res : (res.data ?? []);
+    },
   });
 }
