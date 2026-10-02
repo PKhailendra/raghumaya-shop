@@ -1,1 +1,29 @@
-{"expo":{"android":{"package":"shop.raghumaya.mobile","permissions":["CAMERA"]},"ios":{"bundleIdentifier":"shop.raghumaya.mobile","supportsTablet":true},"name":"RaghuMayaShop","orientation":"portrait","plugins":["expo-router",["expo-camera",{"cameraPermission":"Allow RaghuMayaShop to scan product barcodes."}]],"scheme":"raghumaya","slug":"raghumaya-shop","version":"1.0.0"}}
+{
+  "expo": {
+    "android": {
+      "package": "shop.raghumaya.mobile",
+      "permissions": [
+        "CAMERA"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "shop.raghumaya.mobile",
+      "supportsTablet": true
+    },
+    "name": "RaghuMayaShop",
+    "orientation": "portrait",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow RaghuMayaShop to scan product barcodes."
+        }
+      ],
+      "expo-asset"
+    ],
+    "scheme": "raghumaya",
+    "slug": "raghumaya-shop",
+    "version": "1.0.0"
+  }
+}

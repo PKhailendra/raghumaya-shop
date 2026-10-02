@@ -137,7 +137,9 @@ export default function ShopSalaryPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
+        <>
+        {/* Desktop table */}
+        <Card className="hidden md:block">
           <CardContent className="p-0 overflow-x-auto">
             <Table>
               <TableHeader>
@@ -194,6 +196,45 @@ export default function ShopSalaryPage() {
             </Table>
           </CardContent>
         </Card>
+
+        {/* Mobile cards */}
+        <div className="md:hidden space-y-3">
+          {rows.map((r) => (
+            <Card key={r.member.membershipId}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <div className="font-medium">{r.member.name || "Staff"}</div>
+                    <div className="text-xs text-muted-foreground">{toTitle(r.member.role)}</div>
+                  </div>
+                  <Badge variant={r.payment ? "success" : "warning"}>{r.payment ? "PAID" : "PENDING"}</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                  <div><span className="text-muted-foreground">Monthly: </span>{inr(r.monthlySalary)}</div>
+                  <div><span className="text-muted-foreground">Paid days: </span>{paidDaysOf(r).toFixed(1)}/{r.totalDays}</div>
+                  <div><span className="text-muted-foreground">Advances: </span><span className="text-red-600">{Number(r.advances) > 0 ? inr(r.advances) : "−"}</span></div>
+                  <div><span className="text-muted-foreground">Net: </span><span className="font-semibold">{inr(r.netPayable)}</span></div>
+                </div>
+                <Can any={["SALARY_MANAGE"]}>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="flex-1" onClick={() => setSalaryFor({ membershipId: r.member.membershipId, name: r.member.name || "Staff", current: r.monthlySalary })}>
+                      Salary
+                    </Button>
+                    <Button size="sm" variant="outline" className="flex-1" onClick={() => setAdvanceFor({ membershipId: r.member.membershipId, name: r.member.name || "Staff" })}>
+                      Advance
+                    </Button>
+                    {!r.payment && (
+                      <Button size="sm" className="flex-1" onClick={() => setPayFor({ membershipId: r.member.membershipId, name: r.member.name || "Staff", net: r.netPayable })}>
+                        Pay
+                      </Button>
+                    )}
+                  </div>
+                </Can>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        </>
       )}
 
       <Can any={["SALARY_MANAGE"]}>
