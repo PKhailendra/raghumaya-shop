@@ -97,6 +97,22 @@ export function useRecordPayment() {
   });
 }
 
+export function useCancelInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<Invoice>(`/billing/invoices/${id}`, {
+        method: 'PATCH',
+        body: { status: 'CANCELLED' },
+      }).then(mapInvoice),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['invoices', id] });
+      qc.invalidateQueries({ queryKey: ['analytics'] });
+    },
+  });
+}
+
 export function useInvoiceWhatsappLink(id: string) {
   return useMutation({
     mutationFn: () => api<{ url: string }>(`/billing/invoices/${id}/whatsapp-link`, { method: 'POST' }),

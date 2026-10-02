@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useProductLookup } from '../src/api/products';
+import { useInvoiceBuilder } from '../src/store/invoiceBuilder';
 import { LoadingSpinner } from '../src/components/LoadingSpinner';
 import { Money } from '../src/components/Money';
 import { theme } from '../src/theme';
@@ -14,6 +15,7 @@ export default function ScanScreen() {
   const [scanned, setScanned] = useState(false);
 
   const lookup = useProductLookup('barcode', code);
+  const addItemFromProduct = useInvoiceBuilder((s) => s.addItemFromProduct);
 
   if (!permission) return <LoadingSpinner />;
   if (!permission.granted) {
@@ -68,6 +70,16 @@ export default function ScanScreen() {
               <Text style={styles.meta}>{lookup.data.sku ?? 'No SKU'}</Text>
               <Money value={lookup.data.sellingPrice} style={styles.price} />
               <Text style={styles.meta}>Stock: {lookup.data.currentStock}</Text>
+              <Text
+                style={[styles.button, styles.addToBill]}
+                onPress={() => {
+                  addItemFromProduct(lookup.data);
+                  Alert.alert('Added', `${lookup.data.name} added to the bill.`);
+                  router.push('/billing/new');
+                }}
+              >
+                Add to Bill
+              </Text>
               <Text style={styles.button} onPress={() => router.back()}>Done</Text>
               <Text style={[styles.button, styles.secondary]} onPress={reset}>Scan again</Text>
             </View>
@@ -93,5 +105,6 @@ const styles = StyleSheet.create({
   meta: { fontSize: 13, color: theme.colors.subtext, marginTop: 4 },
   price: { fontSize: 20, fontWeight: '800', color: theme.colors.success, marginTop: 8 },
   button: { marginTop: 16, backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, paddingVertical: 12, paddingHorizontal: 24, color: '#fff', fontWeight: '700', fontSize: 15, textAlign: 'center', overflow: 'hidden' },
+  addToBill: { backgroundColor: theme.colors.success },
   secondary: { backgroundColor: theme.colors.mutedBg, color: theme.colors.text },
 });

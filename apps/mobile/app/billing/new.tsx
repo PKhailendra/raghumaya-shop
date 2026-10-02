@@ -95,6 +95,9 @@ export default function NewInvoiceScreen() {
       <TouchableOpacity style={styles.addBtn} onPress={() => setShowProductPicker(true)}>
         <Text style={styles.addBtnText}>+ Add product</Text>
       </TouchableOpacity>
+      <TouchableOpacity style={[styles.addBtn, styles.scanBtn]} onPress={() => router.push('/scan')}>
+        <Text style={styles.addBtnText}>⌁ Scan barcode</Text>
+      </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Notes</Text>
       <TextInput
@@ -310,6 +313,7 @@ const styles = StyleSheet.create({
   lineTotal: { fontSize: 15, fontWeight: '800', color: theme.colors.text },
   addBtn: { borderWidth: 1, borderColor: theme.colors.primary, borderRadius: theme.radius.sm, paddingVertical: 12, alignItems: 'center', marginTop: 8, borderStyle: 'dashed' },
   addBtnText: { color: theme.colors.primary, fontWeight: '700', fontSize: 15 },
+  scanBtn: { borderColor: theme.colors.success },
   notesInput: { backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, padding: 12, fontSize: 14, color: theme.colors.text, minHeight: 64 },
   totals: { backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: 12, marginTop: 16 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },

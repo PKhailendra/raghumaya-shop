@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View, StyleSheet, Linking, Share } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useInvoice, useRecordPayment, useInvoiceWhatsappLink, useInvoiceSmsLink } from '../../src/api/billing';
+import { useInvoice, useRecordPayment, useCancelInvoice, useInvoiceWhatsappLink, useInvoiceSmsLink } from '../../src/api/billing';
 import { StatusChip } from '../../src/components/StatusChip';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
 import { ErrorState } from '../../src/components/ErrorState';
@@ -14,6 +14,7 @@ export default function InvoiceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const invoice = useInvoice(id);
   const recordPayment = useRecordPayment();
+  const cancelInvoice = useCancelInvoice();
   const whatsappLink = useInvoiceWhatsappLink(id);
   const smsLink = useInvoiceSmsLink(id);
 
@@ -39,6 +40,30 @@ export default function InvoiceDetailScreen() {
           Alert.alert('Failed', e instanceof ApiError ? e.message : 'Could not record payment.');
         },
       },
+    );
+  };
+
+  const doCancel = () => {
+    Alert.alert(
+      'Cancel invoice?',
+      'This will cancel the invoice and restore stock. This cannot be undone.',
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Cancel invoice',
+          style: 'destructive',
+          onPress: () =>
+            cancelInvoice.mutate(id, {
+              onSuccess: () => {
+                Alert.alert('Cancelled', 'Invoice has been cancelled.');
+                invoice.refetch();
+              },
+              onError: (e) => {
+                Alert.alert('Cannot cancel', e instanceof ApiError ? e.message : 'Could not cancel the invoice.');
+              },
+            }),
+        },
+      ],
     );
   };
 
@@ -148,6 +173,18 @@ export default function InvoiceDetailScreen() {
         </TouchableOpacity>
       </View>
 
+      {parseFloat(inv.paidAmount ?? '0') <= 0 && inv.status !== 'CANCELLED' && inv.status !== 'PAID' && (
+        <TouchableOpacity
+          style={styles.cancelBtn}
+          onPress={doCancel}
+          disabled={cancelInvoice.isPending}
+        >
+          <Text style={styles.cancelBtnText}>
+            {cancelInvoice.isPending ? 'Cancelling…' : 'Cancel invoice'}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {inv.notes ? (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Notes</Text>
@@ -198,5 +235,7 @@ const styles = StyleSheet.create({
   shareRow: { flexDirection: 'row', gap: 12 },
   shareBtn: { flex: 1, backgroundColor: theme.colors.primaryLight, borderRadius: theme.radius.sm, paddingVertical: 12, alignItems: 'center' },
   shareText: { color: theme.colors.primary, fontWeight: '700', fontSize: 14 },
+  cancelBtn: { marginTop: 12, borderWidth: 1, borderColor: theme.colors.danger, borderRadius: theme.radius.sm, paddingVertical: 12, alignItems: 'center' },
+  cancelBtnText: { color: theme.colors.danger, fontWeight: '700', fontSize: 14 },
   notes: { fontSize: 14, color: theme.colors.text },
 });
