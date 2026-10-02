@@ -100,11 +100,40 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   applySession: async (accessToken, refreshToken, data) => {
-    const memberships = data.memberships ?? [];
+    // API returns `actor` (not `memberships`). Build a membership-like entry
+    // from actor + /shops/context so permission checks (`can()`) work.
+    let memberships: ShopMembership[] = data.memberships ?? [];
+    const actorShopId =
+      (data as { actor?: { activeShopId?: string } }).actor?.activeShopId ?? null;
+    if (memberships.length === 0 && actorShopId) {
+      try {
+        const baseUrl =
+          (process.env as Record<string, string | undefined>).EXPO_PUBLIC_API_URL ??
+          'https://raghumaya-api-production.up.railway.app/api/v1';
+        const res = await fetch(`${baseUrl}/shops/context`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok) throw new Error('context fetch failed');
+        const ctx = (await res.json()) as { shop: { id: string }; role: string; permissions: string[] };
+        memberships = [
+          {
+            shopId: ctx.shop?.id ?? actorShopId,
+            shop: ctx.shop as ShopMembership['shop'],
+            role: ctx.role ?? 'STAFF',
+            status: 'ACTIVE',
+            permissions: ctx.permissions ?? [],
+          },
+        ];
+      } catch {
+        // context fetch failed — fall back to empty;
+        // permission-gated UI will hide until a fresh login/hydrate.
+        memberships = [];
+      }
+    }
     const activeShopId =
       get().activeShopId && memberships.some((m) => m.shopId === get().activeShopId)
         ? get().activeShopId
-        : memberships[0]?.shopId ?? null;
+        : memberships[0]?.shopId ?? actorShopId;
     await Promise.all([
       SecureStore.setItemAsync(KEYS.accessToken, accessToken),
       SecureStore.setItemAsync(KEYS.refreshToken, refreshToken),
