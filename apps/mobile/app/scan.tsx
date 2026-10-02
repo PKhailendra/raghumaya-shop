@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useProductLookup, useUpdateProduct } from '../src/api/products';
@@ -17,6 +17,7 @@ export default function ScanScreen() {
   const [code, setCode] = useState('');
   const [scanned, setScanned] = useState(false);
   const [addQty, setAddQty] = useState('');
+  const [torchOn, setTorchOn] = useState(false);
   const updateProduct = useUpdateProduct();
 
   const lookup = useProductLookup('barcode', code);
@@ -95,12 +96,19 @@ export default function ScanScreen() {
           <CameraView
             style={StyleSheet.absoluteFill}
             facing="back"
+            enableTorch={torchOn}
             barcodeScannerSettings={{ barcodeTypes: ['aztec', 'codabar', 'code39', 'code93', 'code128', 'datamatrix', 'ean13', 'ean8', 'itf14', 'pdf417', 'qr', 'upc_a', 'upc_e'] }}
             onBarcodeScanned={handleScan}
           />
           <View style={styles.overlay} pointerEvents="none">
             <Text style={styles.overlayText}>Point the camera at a barcode</Text>
           </View>
+          <TouchableOpacity
+            style={[styles.torchBtn, torchOn && styles.torchBtnOn]}
+            onPress={() => setTorchOn((v) => !v)}
+          >
+            <Text style={styles.torchText}>{torchOn ? '🔦 ON' : '🔦 OFF'}</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <View style={styles.result}>
@@ -226,6 +234,9 @@ const styles = StyleSheet.create({
   camera: { flex: 1 },
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 64 },
   overlayText: { color: '#fff', fontSize: 16, fontWeight: '600', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  torchBtn: { position: 'absolute', top: 60, right: 20, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 24, paddingVertical: 10, paddingHorizontal: 16 },
+  torchBtnOn: { backgroundColor: 'rgba(255,200,0,0.9)' },
+  torchText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   result: { flex: 1, backgroundColor: theme.colors.background, padding: 24, paddingTop: 48 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: theme.colors.background },
   title: { fontSize: 20, fontWeight: '700', color: theme.colors.text },

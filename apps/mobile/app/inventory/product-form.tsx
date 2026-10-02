@@ -46,6 +46,7 @@ export default function ProductFormScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
 
   // Prefill from scan (new product flow) — auto-generate unique SKU from name + barcode
   useEffect(() => {
@@ -143,6 +144,7 @@ export default function ProductFormScreen() {
         <CameraView
           style={StyleSheet.absoluteFill}
           facing="back"
+          enableTorch={torchOn}
           barcodeScannerSettings={{
             barcodeTypes: ['aztec', 'codabar', 'code39', 'code93', 'code128', 'datamatrix', 'ean13', 'ean8', 'itf14', 'pdf417', 'qr', 'upc_a', 'upc_e'],
           }}
@@ -151,7 +153,10 @@ export default function ProductFormScreen() {
         <View style={styles.scannerOverlay} pointerEvents="none">
           <Text style={styles.scannerText}>Point at the product barcode</Text>
         </View>
-        <TouchableOpacity style={styles.scannerCancel} onPress={() => setScanning(false)}>
+        <TouchableOpacity style={styles.torchBtn} onPress={() => setTorchOn((v) => !v)}>
+          <Text style={styles.torchText}>{torchOn ? '🔦 ON' : '🔦 OFF'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.scannerCancel} onPress={() => { setScanning(false); setTorchOn(false); }}>
           <Text style={styles.scannerCancelText}>Cancel</Text>
         </TouchableOpacity>
       </View>
@@ -245,4 +250,6 @@ const styles = StyleSheet.create({
   scannerText: { color: '#fff', fontSize: 16, fontWeight: '600', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
   scannerCancel: { position: 'absolute', bottom: 48, alignSelf: 'center', backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 20, paddingVertical: 10, paddingHorizontal: 24 },
   scannerCancelText: { fontWeight: '700', fontSize: 15, color: '#111' },
+  torchBtn: { position: 'absolute', top: 60, right: 20, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 24, paddingVertical: 10, paddingHorizontal: 16 },
+  torchText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });
