@@ -48,7 +48,7 @@ export function useExpenses(filters: ExpenseFilters = {}): UseQueryResult<ListRe
     queryKey: ['expenses', category ?? '', search ?? '', fromDate ?? '', toDate ?? ''],
     queryFn: () =>
       api<ListResponse<ExpenseRecord>>('/expenses', {
-        query: { category, search, fromDate, toDate, limit: 200 },
+        query: { category, search, fromDate, toDate, limit: 100 },
       }),
   });
 }
