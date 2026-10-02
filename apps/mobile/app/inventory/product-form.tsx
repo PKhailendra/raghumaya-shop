@@ -47,11 +47,20 @@ export default function ProductFormScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
 
-  // Prefill barcode from scan (new product flow)
+  // Prefill from scan (new product flow) — auto-generate SKU from name
   useEffect(() => {
     if (!isEdit && !initialized) {
       if (barcodeParam) setBarcode(barcodeParam);
-      if (nameParam) setName(nameParam);
+      if (nameParam) {
+        setName(nameParam);
+        // Auto-generate SKU: "Brooke Bond Red Label" → "brooke-bond-red-label"
+        const autoSku = nameParam
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 40);
+        if (autoSku) setSku(autoSku);
+      }
       if (barcodeParam || nameParam) setInitialized(true);
     }
   }, [isEdit, barcodeParam, nameParam, initialized]);
