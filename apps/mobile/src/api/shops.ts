@@ -2,6 +2,8 @@ import { useQuery, UseQueryResult } from '@tanstack/react-query';
 import { api } from './client';
 import { FinanceDashboard, ListResponse, Shop, ShopMember, SubscriptionInfo } from './types';
 
+export type { ShopMember };
+
 export function useFinanceDashboard(): UseQueryResult<FinanceDashboard> {
   return useQuery({
     queryKey: ['finance', 'dashboard'],
@@ -39,4 +41,38 @@ export function useSubscription(): UseQueryResult<SubscriptionInfo> {
     queryKey: ['subscriptions', 'current'],
     queryFn: () => api<SubscriptionInfo>('/subscriptions/current'),
   });
+}
+
+/* ---- Team member management ---- */
+
+export interface InviteMemberInput {
+  fullName: string;
+  phone: string;
+  email?: string;
+  role: string;
+  permissions?: string[];
+}
+
+export interface UpdateMemberInput {
+  role?: string;
+  permissions?: string[];
+  status?: 'ACTIVE' | 'SUSPENDED';
+}
+
+export async function inviteMember(shopId: string, body: InviteMemberInput): Promise<ShopMember> {
+  return api<ShopMember>(`/shops/${shopId}/members/invite`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateMember(shopId: string, memberId: string, body: UpdateMemberInput): Promise<ShopMember> {
+  return api<ShopMember>(`/shops/${shopId}/members/${memberId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function removeMember(shopId: string, memberId: string): Promise<void> {
+  await api(`/shops/${shopId}/members/${memberId}`, { method: 'DELETE' });
 }

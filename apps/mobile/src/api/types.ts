@@ -69,6 +69,7 @@ export interface ShopMember {
   phone?: string | null;
   role: string;
   status: string;
+  permissions?: string[];
   // API nests identity under `account`; flattened into name/email/phone by useShopMembers
   account?: {
     id?: string;

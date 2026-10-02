@@ -27,6 +27,7 @@ export default function ShopTeamPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editor, setEditor] = useState<ShopMember | null>(null);
   const [removeTarget, setRemoveTarget] = useState<ShopMember | null>(null);
+  const [statusTarget, setStatusTarget] = useState<ShopMember | null>(null);
   const queryClient = useQueryClient();
 
   const members = useQuery({
@@ -40,6 +41,12 @@ export default function ShopTeamPage() {
   const removeMutation = useMutation({
     mutationFn: (id: string) => shopsApi.removeMember(activeShopId!, id),
     onSuccess: invalidate,
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "ACTIVE" | "SUSPENDED" }) =>
+      shopsApi.updateMember(activeShopId!, id, { status }),
+    onSuccess: () => { setStatusTarget(null); invalidate(); },
   });
 
   const rows = (members.data ?? []) as ShopMember[];
@@ -108,6 +115,15 @@ export default function ShopTeamPage() {
                             <Can any={["EMPLOYEE_UPDATE"]}>
                               <Button size="sm" variant="outline" onClick={() => setEditor(m)}>Edit role</Button>
                             </Can>
+                            <Can any={["EMPLOYEE_UPDATE"]}>
+                              <Button
+                                size="sm"
+                                variant={m.status === "ACTIVE" ? "outline" : "default"}
+                                onClick={() => setStatusTarget(m)}
+                              >
+                                {m.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
+                              </Button>
+                            </Can>
                             <Can any={["EMPLOYEE_DELETE"]}>
                               <Button size="sm" variant="destructive" onClick={() => setRemoveTarget(m)}>
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -138,6 +154,25 @@ export default function ShopTeamPage() {
           onDone={() => { setEditor(null); invalidate(); }}
         />
       )}
+      <ConfirmDialog
+        open={!!statusTarget}
+        onOpenChange={(v) => !v && setStatusTarget(null)}
+        title={statusTarget?.status === "ACTIVE" ? "Deactivate member" : "Reactivate member"}
+        description={
+          statusTarget?.status === "ACTIVE"
+            ? `${statusTarget?.name} will no longer be able to log in. You can reactivate them later.`
+            : `${statusTarget?.name} will be able to log in and use the shop again.`
+        }
+        confirmLabel={statusTarget?.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
+        destructive={statusTarget?.status === "ACTIVE"}
+        busy={statusMutation.isPending}
+        onConfirm={() => {
+          void statusMutation.mutateAsync({
+            id: statusTarget!.id,
+            status: statusTarget!.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
+          });
+        }}
+      />
       <ConfirmDialog
         open={!!removeTarget}
         onOpenChange={(v) => !v && setRemoveTarget(null)}
