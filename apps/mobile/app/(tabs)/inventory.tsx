@@ -42,7 +42,10 @@ const badgeStyle = {
 export default function InventoryScreen() {
   const router = useRouter();
   const can = useAuthStore((s) => s.can);
-  const canManage = can('INVENTORY_CREATE');
+  const memberships = useAuthStore((s) => s.memberships);
+  const activeShopId = useAuthStore((s) => s.activeShopId);
+  const myRole = (memberships.find((m) => m.shopId === activeShopId) ?? memberships[0])?.role;
+  const canManage = myRole === 'OWNER' || can('INVENTORY_CREATE');
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState<string | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -130,8 +133,12 @@ function ProductDetailModal(props: { productId: string | null; onClose: () => vo
   const { data, isLoading } = useProduct(props.productId ?? '');
   const router = useRouter();
   const can = useAuthStore((s) => s.can);
-  const canManage = can('INVENTORY_UPDATE');
-  const canDelete = can('INVENTORY_DELETE');
+  const memberships = useAuthStore((s) => s.memberships);
+  const activeShopId = useAuthStore((s) => s.activeShopId);
+  const myRole = (memberships.find((m) => m.shopId === activeShopId) ?? memberships[0])?.role;
+  const isOwner = myRole === 'OWNER';
+  const canManage = isOwner || can('INVENTORY_UPDATE');
+  const canDelete = isOwner || can('INVENTORY_DELETE');
   const del = useDeleteProduct();
 
   const doDelete = () => {
