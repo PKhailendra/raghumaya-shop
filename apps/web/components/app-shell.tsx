@@ -159,8 +159,23 @@ export function ShopSwitcher() {
   const { account, switchShop, activeShopId } = useAuth();
   const memberships = account?.memberships ?? [];
   const active = memberships.find((m) => m.shopId === activeShopId);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   if (memberships.length === 0) return null;
+
+  const doSwitch = async (shopId: string) => {
+    if (shopId === activeShopId || busyId) return;
+    setBusyId(shopId);
+    setError(null);
+    try {
+      await switchShop(shopId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not switch shop.");
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <div className="px-2 py-2">
@@ -174,13 +189,18 @@ export function ShopSwitcher() {
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-60">
           {memberships.map((m) => (
-            <DropdownMenuItem key={m.shopId} onClick={() => switchShop(m.shopId)}>
+            <DropdownMenuItem key={m.shopId} onClick={() => doSwitch(m.shopId)}>
               <div className="flex-1 truncate">{m.shopName}</div>
-              {m.shopId === activeShopId && <span className="text-xs text-primary">Active</span>}
+              {m.shopId === activeShopId ? (
+                <span className="text-xs text-primary">Active</span>
+              ) : busyId === m.shopId ? (
+                <span className="text-xs text-muted-foreground">Switching…</span>
+              ) : null}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+      {error && <div className="mt-1 px-1 text-xs text-destructive">{error}</div>}
     </div>
   );
 }

@@ -178,6 +178,9 @@ export type BillingCycle = (typeof BILLING_CYCLES)[number];
 export const SHOP_STATUSES = ['ACTIVE', 'SUSPENDED', 'BLOCKED'] as const;
 export type ShopStatus = (typeof SHOP_STATUSES)[number];
 
+export const SHOP_TYPES = ['RETAIL', 'WHOLESALE', 'DISTRIBUTOR', 'SERVICE', 'MANUFACTURING', 'ONLINE', 'OTHER'] as const;
+export type ShopType = (typeof SHOP_TYPES)[number];
+
 export const TWO_FA_METHODS = ['AUTHENTICATOR', 'SMS', 'EMAIL', 'BACKUP_CODE'] as const;
 export type TwoFaMethod = (typeof TWO_FA_METHODS)[number];
 

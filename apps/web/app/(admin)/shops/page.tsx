@@ -4,7 +4,7 @@ import type React from "react";
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { adminApi, ApiError } from "@/lib/api";
+import { adminApi, ApiError, SHOP_TYPE_OPTIONS } from "@/lib/api";
 import { formatDateTime, toTitle } from "@/lib/format";
 import { PageHeader, ErrorState, EmptyState, TableSkeleton } from "@/components/states";
 import { Pagination } from "@/components/pagination";
@@ -199,6 +199,8 @@ function CreateShopDialog({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [shopType, setShopType] = useState("RETAIL");
+  const [gstNumber, setGstNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -209,6 +211,8 @@ function CreateShopDialog({
     if (!ownerName.trim()) return setError("Owner name is required.");
     if (phone.trim().length < 7) return setError("A valid owner phone number is required.");
     if (password.length < 8) return setError("Password must be at least 8 characters.");
+    if (gstNumber.trim() && !/^[0-9A-Z]{15}$/i.test(gstNumber.trim()))
+      return setError("GST number must be 15 characters (e.g. 22AAAAA0000A1Z5).");
     setBusy(true);
     try {
       await adminApi.createShop({
@@ -217,12 +221,16 @@ function CreateShopDialog({
         email: email.trim() || undefined,
         phone: phone.trim(),
         password,
+        shopType,
+        gstNumber: gstNumber.trim() || undefined,
       });
       setName("");
       setOwnerName("");
       setEmail("");
       setPhone("");
       setPassword("");
+      setShopType("RETAIL");
+      setGstNumber("");
       onCreated();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create the shop.");
@@ -261,6 +269,20 @@ function CreateShopDialog({
           <div className="space-y-2">
             <Label htmlFor="cs-password">Owner password *</Label>
             <Input id="cs-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 8 characters" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="cs-shoptype">Shop type *</Label>
+              <Select
+                value={shopType}
+                onChange={setShopType}
+                options={[...SHOP_TYPE_OPTIONS]}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cs-gst">GST number (optional)</Label>
+              <Input id="cs-gst" value={gstNumber} onChange={(e) => setGstNumber(e.target.value.toUpperCase())} placeholder="15-character GSTIN" maxLength={15} />
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>

@@ -234,6 +234,20 @@ export const authApi = {
 };
 
 // ---------- Shops ----------
+export const SHOP_TYPE_OPTIONS = [
+  { value: "RETAIL", label: "Retail" },
+  { value: "WHOLESALE", label: "Wholesale" },
+  { value: "DISTRIBUTOR", label: "Distributor" },
+  { value: "SERVICE", label: "Service" },
+  { value: "MANUFACTURING", label: "Manufacturing" },
+  { value: "ONLINE", label: "Online" },
+  { value: "OTHER", label: "Other" },
+] as const;
+
+export function shopTypeLabel(value?: string | null): string {
+  return SHOP_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? "-";
+}
+
 export type Shop = {
   id: string;
   name: string;
@@ -1062,13 +1076,15 @@ export const adminApi = {
   shops: (params?: PageParams & { status?: string }) => get<ListResponse<Shop>>("/admin/shops", params),
   getShop: (id: string) => get<Shop & Record<string, unknown>>(`/admin/shops/${id}`),
   // Backend creates a shop owner + shop + membership in one call.
-  createShop: (body: { name: string; ownerName: string; email?: string; phone: string; password: string; [k: string]: unknown }) =>
+  createShop: (body: { name: string; ownerName: string; email?: string; phone: string; password: string; shopType?: string; gstNumber?: string; [k: string]: unknown }) =>
     post("/admin/shop-owners", {
       shopName: body.name,
       fullName: body.ownerName,
       email: body.email || undefined,
       phone: body.phone,
       password: body.password,
+      shopType: body.shopType || undefined,
+      gstNumber: body.gstNumber || undefined,
     }),
   updateShop: (id: string, body: Record<string, unknown>) => patch<Shop>(`/admin/shops/${id}`, body),
   suspendShop: (id: string, reason?: string) => post(`/admin/shops/${id}/suspend`, { reason }),

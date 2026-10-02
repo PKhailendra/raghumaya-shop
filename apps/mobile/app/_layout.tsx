@@ -1,19 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '../src/store/auth';
+import { queryClient } from '../src/api/queryClient';
 import { OfflineBanner } from '../src/components/OfflineBanner';
 import { LanguageProvider } from '../src/i18n';
 import { theme } from '../src/theme';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { retry: 1, staleTime: 30_000 },
-  },
-});
 
 function AuthGate() {
   const router = useRouter();

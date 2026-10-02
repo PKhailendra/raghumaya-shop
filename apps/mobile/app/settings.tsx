@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useAuthStore } from '../src/store/auth';
 import { useMyShops } from '../src/api/shops';
 import { LoadingSpinner } from '../src/components/LoadingSpinner';
@@ -9,6 +10,7 @@ import { ApiError } from '../src/api/client';
 import { theme } from '../src/theme';
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const account = useAuthStore((s) => s.account);
   const memberships = useAuthStore((s) => s.memberships);
   const activeShopId = useAuthStore((s) => s.activeShopId);
@@ -21,7 +23,9 @@ export default function SettingsScreen() {
     setSwitching(shopId);
     try {
       await switchShop(shopId);
-      Alert.alert('Shop switched', 'Now viewing the selected shop.');
+      // Land on the new shop's dashboard so the owner immediately sees the
+      // selected shop's data (all screens were invalidated on switch).
+      router.replace('/(tabs)/dashboard');
     } catch (e) {
       Alert.alert('Failed', e instanceof ApiError ? e.message : 'Could not switch shop.');
     } finally {

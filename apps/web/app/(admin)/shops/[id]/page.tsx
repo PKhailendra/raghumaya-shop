@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { adminApi, ApiError } from "@/lib/api";
+import { adminApi, ApiError, shopTypeLabel } from "@/lib/api";
 import { formatDateTime, inr, toTitle } from "@/lib/format";
 import { PageHeader, ErrorState, EmptyState } from "@/components/states";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +42,9 @@ export default function AdminShopDetailPage() {
   const members = (shop.members as unknown[]) ?? [];
   const subscription = shop.subscription as Record<string, unknown> | undefined;
   const audit = (shop.recentActivity as unknown[]) ?? [];
+  const owner = members
+    .map((m) => m as Record<string, string | null>)
+    .find((m) => m.role === "OWNER") ?? null;
 
   return (
     <div>
@@ -70,11 +73,21 @@ export default function AdminShopDetailPage() {
                 <InfoRow label="Email" value={(shop.email as string) ?? "-"} />
                 <InfoRow label="Phone" value={(shop.phone as string) ?? "-"} />
                 <InfoRow label="GST number" value={(shop.gstNumber as string) ?? "-"} />
-                <InfoRow label="Shop type" value={(shop.shopType as string) ?? "-"} />
+                <InfoRow label="Shop type" value={shopTypeLabel(shop.shopType as string | undefined)} />
                 <InfoRow label="Owner" value={(shop.ownerName as string) ?? "-"} />
                 <InfoRow label="Status" value={toTitle(shop.status as string)} />
                 <InfoRow label="Created" value={formatDateTime(shop.createdAt as string)} />
               </dl>
+              {owner && (
+                <div className="mt-6">
+                  <div className="font-medium mb-2 text-sm">Owner account</div>
+                  <dl className="grid gap-3 sm:grid-cols-3 text-sm rounded-md border p-4">
+                    <InfoRow label="Name" value={owner.name ?? "-"} />
+                    <InfoRow label="Email" value={owner.email ?? "-"} />
+                    <InfoRow label="Phone" value={owner.phone ?? "-"} />
+                  </dl>
+                </div>
+              )}
               {shop.address && (
                 <div className="mt-4 text-sm">
                   <div className="font-medium mb-1">Address</div>

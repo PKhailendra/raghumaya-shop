@@ -213,7 +213,7 @@ export async function getShop(id: string) {
 export async function updateShop(ctx: ReqCtx, id: string, input: Record<string, unknown>) {
   const before = await getShop(id);
   const data: Record<string, unknown> = {};
-  for (const k of ['name', 'email', 'phone', 'address', 'city', 'state', 'pincode', 'gstNumber', 'logoUrl', 'timezone'] as const) {
+  for (const k of ['name', 'email', 'phone', 'address', 'city', 'state', 'pincode', 'gstNumber', 'shopType', 'logoUrl', 'timezone'] as const) {
     if (input[k] !== undefined) data[k] = (input[k] as string) || null;
   }
   if (input.settings !== undefined) data.settings = input.settings as Prisma.InputJsonValue;
@@ -291,6 +291,7 @@ export async function createShopOwner(
     state?: string;
     pincode?: string;
     gstNumber?: string;
+    shopType?: 'RETAIL' | 'WHOLESALE' | 'DISTRIBUTOR' | 'SERVICE' | 'MANUFACTURING' | 'ONLINE' | 'OTHER';
   },
 ) {
   const existing = await prisma.account.findFirst({
@@ -308,11 +309,15 @@ export async function createShopOwner(
         name: input.shopName,
         ownerAccountId: account.id,
         phone: input.shopPhone ?? input.phone,
+        // Keep the shop's own contact email in sync with the owner email so it
+        // reflects on the admin shop list/detail pages.
+        email: input.email,
         address: input.shopAddress,
         city: input.city,
         state: input.state,
         pincode: input.pincode,
         gstNumber: input.gstNumber,
+        shopType: input.shopType ?? 'RETAIL',
         status: 'ACTIVE',
       },
     });

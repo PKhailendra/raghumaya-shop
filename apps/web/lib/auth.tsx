@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   Account,
   LoginResponse,
@@ -9,6 +10,7 @@ import {
   setRefreshToken,
   shopsApi,
 } from "./api";
+import { queryClient } from "./query";
 
 type AuthState = {
   account: Account | null;
@@ -22,6 +24,20 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null);
 const ACCOUNT_KEY = "rms_account";
 
+async function loadMemberships(): Promise<Account["memberships"]> {
+  try {
+    const shops = await shopsApi.myShops();
+    return (shops ?? []).map((s: Record<string, any>) => ({
+      shopId: String(s.id),
+      shopName: String(s.name ?? "Shop"),
+      role: String(s.role ?? ""),
+      permissions: [],
+    }));
+  } catch {
+    return [];
+  }
+}
+
 function readCookie(name: string): string | null {
   const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : null;
@@ -30,6 +46,7 @@ function readCookie(name: string): string | null {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     (async () => {
@@ -42,6 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const res = await authApi.refresh(readCookie("rms_rt")!);
             setAccessToken(res.accessToken);
             setRefreshToken(res.refreshToken);
+            // Refresh shop memberships so the shop switcher is populated on reload.
+            if (parsed.type === "shop") {
+              const memberships = await loadMemberships();
+              const withShops = { ...parsed, memberships };
+              setAccount(withShops);
+              localStorage.setItem(ACCOUNT_KEY, JSON.stringify(withShops));
+            }
           } catch {
             // Refresh failed — session is gone. Clean up.
             localStorage.removeItem(ACCOUNT_KEY);
@@ -62,8 +86,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if ("requiresTwoFactor" in res && !res.requiresTwoFactor) {
       setAccessToken(res.accessToken);
       setRefreshToken(res.refreshToken);
-      setAccount(res.account);
-      localStorage.setItem(ACCOUNT_KEY, JSON.stringify(res.account));
+      // Populate the shop switcher: fetch the shops this account belongs to.
+      const memberships = res.account.type === "shop" ? await loadMemberships() : [];
+      const withShops: Account = { ...res.account, memberships };
+      setAccount(withShops);
+      localStorage.setItem(ACCOUNT_KEY, JSON.stringify(withShops));
     }
     return res;
   }, []);
@@ -86,7 +113,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const updated: Account = { ...account!, activeShopId: shopId };
     setAccount(updated);
     localStorage.setItem(ACCOUNT_KEY, JSON.stringify(updated));
-  }, [account]);
+    // Drop every cached shop query so dashboard/customers/products/sales/finance
+    // refetch against the newly selected shop instead of showing stale data.
+    // ShopProvider refreshes role/permissions automatically via activeShopId.
+    await queryClient.invalidateQueries();
+    router.replace("/shop/dashboard");
+  }, [account, router]);
 
   const value = useMemo<AuthState>(
     () => ({

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { api } from '../api/client';
+import { queryClient } from '../api/queryClient';
 import { Account, LoginResponse, Shop, ShopMembership, isChallenge } from '../api/types';
 
 const KEYS = {
@@ -153,14 +154,34 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   switchShop: async (shopId) => {
-    const res = await api<{ accessToken: string; refreshToken?: string }>('/shops/switch', {
+    const res = await api<{ accessToken: string; refreshToken?: string; shop?: Shop }>('/shops/switch', {
       method: 'POST',
       body: { shopId },
     });
     const refreshToken = res.refreshToken ?? get().refreshToken ?? '';
     await get().setTokens(res.accessToken, refreshToken);
+    // Refresh role/permissions for the newly active shop so permission-gated
+    // UI reflects the new shop (one account can hold different roles per shop).
+    let memberships = get().memberships;
+    try {
+      const ctx = await api<{ shop?: Shop; role?: string; permissions?: string[] }>('/shops/context');
+      const entry: ShopMembership = {
+        shopId,
+        shop: ctx.shop ?? res.shop ?? memberships.find((m) => m.shopId === shopId)?.shop,
+        role: ctx.role ?? memberships.find((m) => m.shopId === shopId)?.role ?? 'STAFF',
+        status: 'ACTIVE',
+        permissions: ctx.permissions ?? [],
+      };
+      memberships = [...memberships.filter((m) => m.shopId !== shopId), entry];
+      await SecureStore.setItemAsync(KEYS.memberships, JSON.stringify(memberships));
+    } catch {
+      // Context refresh failed — keep previous memberships; the shop still switches.
+    }
     await SecureStore.setItemAsync(KEYS.activeShopId, shopId);
-    set({ activeShopId: shopId });
+    set({ activeShopId: shopId, memberships });
+    // Drop cached data from the previous shop so every screen (dashboard,
+    // customers, products, sales, finance) refetches for the newly selected shop.
+    await queryClient.invalidateQueries();
   },
 
   logout: async () => {

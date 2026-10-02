@@ -41,6 +41,16 @@ enum ShopStatus {
   BLOCKED
 }
 
+enum ShopType {
+  RETAIL
+  WHOLESALE
+  DISTRIBUTOR
+  SERVICE
+  MANUFACTURING
+  ONLINE
+  OTHER
+}
+
 
 enum UserRole {
   OWNER
@@ -167,6 +177,7 @@ model Shop {
   state            String?    @db.VarChar(100)
   pincode          String?    @db.VarChar(20)
   gstNumber        String?    @db.VarChar(20)
+  shopType         ShopType   @default(RETAIL)
   logoUrl          String?    @db.VarChar(500)
   currency         String     @default("INR") @db.VarChar(3)
   timezone         String     @default("Asia/Kolkata") @db.VarChar(60)

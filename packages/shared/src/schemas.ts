@@ -14,6 +14,7 @@ import {
   PLAN_CODES,
   SHOP_PERMISSIONS,
   SHOP_STATUSES,
+  SHOP_TYPES,
   STOCK_MOVEMENT_TYPES,
   TWO_FA_METHODS,
   USER_ROLES,
@@ -65,6 +66,7 @@ export const registerShopOwnerSchema = z.object({
   state: z.string().trim().max(100).optional(),
   pincode: z.string().trim().max(20).optional(),
   gstNumber: z.string().trim().max(20).optional(),
+  shopType: z.enum(SHOP_TYPES).optional(),
 });
 
 export const createShopUserSchema = z.object({
@@ -170,6 +172,7 @@ export const createShopSchema = z.object({
   state: z.string().trim().max(100).optional(),
   pincode: z.string().trim().max(20).optional(),
   gstNumber: z.string().trim().max(20).optional(),
+  shopType: z.enum(SHOP_TYPES).optional(),
   currency: z.string().trim().length(3).default('INR'),
   timezone: z.string().trim().max(60).default('Asia/Kolkata'),
 });
