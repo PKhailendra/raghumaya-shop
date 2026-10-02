@@ -35,7 +35,9 @@ export function useProductLookup(
   return useQuery({
     queryKey: ['product-lookup', type, code],
     queryFn: () =>
-      api<Product>('/inventory/products/lookup', { query: { type, code } }),
+      api<{ product: Product; variant?: unknown }>('/inventory/products/lookup', {
+        query: { type, code },
+      }).then((res) => res.product),
     enabled: code.length > 0,
   });
 }
