@@ -22,10 +22,24 @@ import { theme } from '../../src/theme';
 
 export default function ProductFormScreen() {
   const router = useRouter();
-  const { id, barcode: barcodeParam, name: nameParam } = useLocalSearchParams<{
+  const {
+    id,
+    barcode: barcodeParam,
+    name: nameParam,
+    brand: brandParam,
+    category: categoryParam,
+    description: descriptionParam,
+    packSize: packSizeParam,
+    model: modelParam,
+  } = useLocalSearchParams<{
     id?: string;
     barcode?: string;
     name?: string;
+    brand?: string;
+    category?: string;
+    description?: string;
+    packSize?: string;
+    model?: string;
   }>();
   const isEdit = !!id;
 
@@ -36,6 +50,7 @@ export default function ProductFormScreen() {
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
   const [barcode, setBarcode] = useState('');
+  const [description, setDescription] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
   const [mrp, setMrp] = useState('');
@@ -65,14 +80,25 @@ export default function ProductFormScreen() {
         const autoSku = [namePart, barcodeSuffix].filter(Boolean).join('-');
         if (autoSku) setSku(autoSku);
       }
+      // Enrichment extras: brand/category/model/pack-size folded into description
+      // so nothing from the lookup is lost (backend product has description).
+      const extras = [
+        brandParam ? `Brand: ${brandParam}` : '',
+        categoryParam ? `Category: ${categoryParam}` : '',
+        modelParam ? `Model: ${modelParam}` : '',
+        packSizeParam ? `Pack: ${packSizeParam}` : '',
+        descriptionParam ?? '',
+      ].filter(Boolean).join('\n');
+      if (extras) setDescription(extras);
       if (barcodeParam || nameParam) setInitialized(true);
     }
-  }, [isEdit, barcodeParam, nameParam, initialized]);
+  }, [isEdit, barcodeParam, nameParam, brandParam, categoryParam, descriptionParam, packSizeParam, modelParam, initialized]);
   useEffect(() => {
     if (isEdit && existing && !initialized) {
       setName(existing.name ?? '');
       setSku(existing.sku ?? '');
       setBarcode(existing.barcode ?? '');
+      setDescription((existing as { description?: string }).description ?? '');
       setSellingPrice(existing.sellingPrice ?? '');
       setPurchasePrice(existing.purchasePrice ?? '');
       setMrp(existing.mrp ?? '');
@@ -114,6 +140,7 @@ export default function ProductFormScreen() {
       sellingPrice: price.toFixed(2),
       ...(sku.trim() ? { sku: sku.trim() } : {}),
       ...(barcode.trim() ? { barcode: barcode.trim() } : {}),
+      ...(description.trim() ? { description: description.trim() } : {}),
       ...(purchasePrice.trim() ? { purchasePrice: parseFloat(purchasePrice).toFixed(2) } : {}),
       ...(mrp.trim() ? { mrp: parseFloat(mrp).toFixed(2) } : {}),
       ...(currentStock.trim() ? { currentStock: currentStock.trim() } : {}),
@@ -188,6 +215,17 @@ export default function ProductFormScreen() {
       <Text style={styles.label}>SKU</Text>
       <TextInput style={styles.input} value={sku} onChangeText={setSku} placeholder="Optional" placeholderTextColor={theme.colors.muted} />
 
+      <Text style={styles.label}>Description</Text>
+      <TextInput
+        style={[styles.input, styles.multiline]}
+        value={description}
+        onChangeText={setDescription}
+        placeholder="Auto-filled from barcode lookup (editable)"
+        placeholderTextColor={theme.colors.muted}
+        multiline
+        numberOfLines={3}
+      />
+
       <View style={styles.row}>
         <View style={styles.half}>
           <Text style={styles.label}>Selling price *</Text>
@@ -236,6 +274,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '800', color: theme.colors.text, marginBottom: 16 },
   label: { fontSize: 13, fontWeight: '600', color: theme.colors.subtext, marginTop: 12, marginBottom: 6 },
   input: { backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, padding: 12, fontSize: 15, color: theme.colors.text },
+  multiline: { minHeight: 72, textAlignVertical: 'top' },
   row: { flexDirection: 'row', gap: 12 },
   half: { flex: 1 },
   barcodeRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },

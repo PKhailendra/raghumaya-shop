@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'reac
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useProductLookup, useUpdateProduct } from '../src/api/products';
+import { lookupBarcode, type EnrichedProduct } from '../src/api/barcodeLookup';
 import { useInvoiceBuilder } from '../src/store/invoiceBuilder';
 import { LoadingSpinner } from '../src/components/LoadingSpinner';
 import { Money } from '../src/components/Money';
@@ -23,15 +24,10 @@ export default function ScanScreen() {
   const lookup = useProductLookup('barcode', code);
   const addItemFromProduct = useInvoiceBuilder((s) => s.addItemFromProduct);
 
-  // External barcode database lookup (OpenFoodFacts) — only in inventory mode
-  // when the product is not in own inventory
+  // External barcode enrichment (multi-API fallback chain) — only in inventory
+  // mode when the product is not in own inventory.
   const [extLoading, setExtLoading] = useState(false);
-  const [extProduct, setExtProduct] = useState<{
-    name?: string;
-    brand?: string;
-    quantity?: string;
-    imageUrl?: string;
-  } | null>(null);
+  const [extProduct, setExtProduct] = useState<EnrichedProduct | null>(null);
 
   useEffect(() => {
     if (!isInventoryMode || !lookup.isError || !code) {
@@ -40,21 +36,9 @@ export default function ScanScreen() {
     }
     let cancelled = false;
     setExtLoading(true);
-    fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (cancelled) return;
-        if (d?.status === 1 && d?.product) {
-          const p = d.product;
-          setExtProduct({
-            name: p.product_name ?? p.product_name_en,
-            brand: p.brands,
-            quantity: p.quantity,
-            imageUrl: p.image_url,
-          });
-        } else {
-          setExtProduct(null);
-        }
+    lookupBarcode(code)
+      .then((p) => {
+        if (!cancelled) setExtProduct(p);
       })
       .catch(() => {
         if (!cancelled) setExtProduct(null);
@@ -66,6 +50,20 @@ export default function ScanScreen() {
       cancelled = true;
     };
   }, [isInventoryMode, lookup.isError, code]);
+
+  const useExtDetailsUrl = () => {
+    if (!extProduct) return '';
+    const q = new URLSearchParams({
+      barcode: code,
+      ...(extProduct.name ? { name: extProduct.name } : {}),
+      ...(extProduct.brand ? { brand: extProduct.brand } : {}),
+      ...(extProduct.category ? { category: extProduct.category } : {}),
+      ...(extProduct.description ? { description: extProduct.description } : {}),
+      ...(extProduct.weightOrSize ? { packSize: extProduct.weightOrSize } : {}),
+      ...(extProduct.model ? { model: extProduct.model } : {}),
+    });
+    return `/inventory/product-form?${q.toString()}`;
+  };
 
   if (!permission) return <LoadingSpinner />;
   if (!permission.granted) {
@@ -124,17 +122,24 @@ export default function ScanScreen() {
                   <LoadingSpinner />
                 ) : extProduct?.name ? (
                   <View style={styles.card}>
-                    <Text style={styles.extLabel}>Found online — tap to use:</Text>
+                    <Text style={styles.extLabel}>
+                      Found online{extProduct.sources.length > 0 ? ` (${extProduct.sources.join(' + ')})` : ''} — tap to use:
+                    </Text>
                     <Text style={styles.productName}>{extProduct.name}</Text>
                     {extProduct.brand ? <Text style={styles.meta}>Brand: {extProduct.brand}</Text> : null}
-                    {extProduct.quantity ? <Text style={styles.meta}>Pack: {extProduct.quantity}</Text> : null}
+                    {extProduct.manufacturer ? <Text style={styles.meta}>Mfg: {extProduct.manufacturer}</Text> : null}
+                    {extProduct.category ? <Text style={styles.meta}>Category: {extProduct.category}</Text> : null}
+                    {extProduct.weightOrSize ? <Text style={styles.meta}>Pack: {extProduct.weightOrSize}</Text> : null}
+                    {extProduct.model ? <Text style={styles.meta}>Model: {extProduct.model}</Text> : null}
+                    {extProduct.description ? (
+                      <Text style={styles.meta} numberOfLines={3}>{extProduct.description}</Text>
+                    ) : null}
+                    {typeof extProduct.price === 'number' ? (
+                      <Text style={styles.meta}>Online price hint: {extProduct.price}</Text>
+                    ) : null}
                     <Text
                       style={[styles.button, styles.addToBill]}
-                      onPress={() =>
-                        router.push(
-                          `/inventory/product-form?barcode=${encodeURIComponent(code)}&name=${encodeURIComponent(extProduct.name ?? '')}&brand=${encodeURIComponent(extProduct.brand ?? '')}`,
-                        )
-                      }
+                      onPress={() => router.push(useExtDetailsUrl() as never)}
                     >
                       ✓ Use these details
                     </Text>

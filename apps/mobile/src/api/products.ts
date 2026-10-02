@@ -55,6 +55,7 @@ export interface ProductInput {
   barcode?: string;
   qrCode?: string;
   categoryId?: string;
+  description?: string;
   unit?: string;
   purchasePrice?: string;
   sellingPrice: string;
