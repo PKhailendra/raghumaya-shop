@@ -10,3 +10,4 @@ build/
 .DS_Store
 coverage/
 prisma/migrations/dev/
+apps/mobile/package-lock.json
