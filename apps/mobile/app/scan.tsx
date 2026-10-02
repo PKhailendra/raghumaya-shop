@@ -73,14 +73,17 @@ export default function ScanScreen() {
               <Text
                 style={[styles.button, styles.addToBill]}
                 onPress={() => {
-                  addItemFromProduct(lookup.data);
-                  Alert.alert('Added', `${lookup.data.name} added to the bill.`);
-                  router.push('/billing/new');
+                  const p = lookup.data;
+                  addItemFromProduct(p);
+                  Alert.alert('Added ✓', `${p.name} added to the bill. Scan next item or go to bill.`, [
+                    { text: 'Scan more', style: 'cancel', onPress: reset },
+                    { text: 'Go to Bill', onPress: () => router.push('/billing/new') },
+                  ]);
                 }}
               >
                 Add to Bill
               </Text>
-              <Text style={styles.button} onPress={() => router.back()}>Done</Text>
+              <Text style={styles.button} onPress={() => router.push('/billing/new')}>Go to Bill</Text>
               <Text style={[styles.button, styles.secondary]} onPress={reset}>Scan again</Text>
             </View>
           ) : null}

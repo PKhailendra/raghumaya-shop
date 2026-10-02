@@ -50,7 +50,27 @@ export const useInvoiceBuilder = create<InvoiceBuilderState>()((set, get) => ({
 
   addItemFromProduct: (p, quantity = 1) => {
     const { isInterState, items } = get();
-    if (items.some((i) => i.productId === p.id)) return;
+    const existing = items.find((i) => i.productId === p.id);
+    if (existing) {
+      // Same product scanned again → bump quantity by the scanned amount
+      const line = computeLine(
+        {
+          quantity: existing.quantity + quantity,
+          unitPrice: existing.unitPrice,
+          discountRate: existing.discountRate,
+          gstRate: existing.gstRate,
+        },
+        isInterState,
+      );
+      set({
+        items: items.map((it) =>
+          it.key === existing.key
+            ? { ...line, key: it.key, productId: it.productId, description: it.description }
+            : it,
+        ),
+      });
+      return;
+    }
     const line = computeLine(
       {
         quantity,
