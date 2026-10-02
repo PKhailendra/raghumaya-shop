@@ -157,7 +157,10 @@ export default function AttendanceScreen() {
       </View>
 
       {staffList.length === 0 ? (
-        <EmptyState title="No staff" message="No staff members to mark attendance for." />
+        <EmptyState
+          title="No staff"
+          message={activeShopId ? "No staff members to mark attendance for." : "Select a shop to view staff."}
+        />
       ) : (
         staffList.map((m) => (
           <View key={m.id} style={styles.row}>

@@ -39,6 +39,11 @@ function monthLabel(year: number, month: number): string {
   return `${MONTHS[month - 1]} ${year}`;
 }
 
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function SalaryScreen() {
   const activeShopId = useAuthStore((s) => s.activeShopId);
   const now = new Date();
@@ -128,13 +133,17 @@ export default function SalaryScreen() {
     );
   };
 
-  const handleAdvance = (membershipId: string, amount: string) => {
+  const handleAdvance = (membershipId: string, amount: string, date?: string) => {
     if (!amount || Number(amount) <= 0) {
       Alert.alert('Invalid', 'Enter a valid amount.');
       return;
     }
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      Alert.alert('Invalid', 'Enter a valid date (YYYY-MM-DD).');
+      return;
+    }
     recordAdvance.mutate(
-      { membershipId, amount },
+      { membershipId, amount, advanceDate: date },
       {
         onSuccess: () => {
           setAdvanceModal(false);
@@ -269,6 +278,7 @@ export default function SalaryScreen() {
           onSubmit={handleAdvance}
           busy={recordAdvance.isPending}
           amountLabel="Advance amount (₹)"
+          showDate
         />
       </Modal>
 
@@ -366,16 +376,20 @@ function MemberPickerForm({
   onSubmit,
   busy,
   amountLabel,
+  showDate,
 }: {
   title: string;
   staff: { id: string; name: string; role: string }[];
   onCancel: () => void;
-  onSubmit: (membershipId: string, amount: string) => void;
+  onSubmit: (membershipId: string, amount: string, date?: string) => void;
   busy: boolean;
   amountLabel: string;
+  showDate?: boolean;
 }) {
   const [memberId, setMemberId] = useState('');
   const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(localToday());
+  const isDisabled = busy || !memberId;
   return (
     <View style={styles.modalBg}>
       <View style={styles.modal}>
@@ -402,14 +416,28 @@ function MemberPickerForm({
           onChangeText={setAmount}
           placeholder="0"
         />
+        {showDate && (
+          <>
+            <Text style={styles.inputLabel}>Date</Text>
+            <TextInput
+              style={styles.input}
+              value={date}
+              onChangeText={(v) => {
+                if (/^\d{0,4}-?\d{0,2}-?\d{0,2}$/.test(v) && v <= localToday()) setDate(v);
+              }}
+              placeholder="YYYY-MM-DD"
+              maxLength={10}
+            />
+          </>
+        )}
         <View style={styles.modalBtns}>
           <TouchableOpacity style={styles.modalCancel} onPress={onCancel}>
             <Text style={styles.modalCancelText}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.modalPrimary, busy && styles.btnDisabled]}
-            onPress={() => memberId && onSubmit(memberId, amount)}
-            disabled={busy || !memberId}
+            style={[styles.modalPrimary, isDisabled && styles.btnDisabled]}
+            onPress={() => memberId && onSubmit(memberId, amount, showDate ? date : undefined)}
+            disabled={isDisabled}
           >
             <Text style={styles.modalPrimaryText}>{busy ? 'Saving…' : 'Save'}</Text>
           </TouchableOpacity>

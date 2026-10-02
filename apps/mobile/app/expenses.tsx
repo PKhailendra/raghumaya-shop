@@ -104,10 +104,16 @@ export default function ExpensesScreen() {
         <Text style={styles.summaryLabel}>
           {summary.data ? `${monthStr}` : ''} total
         </Text>
-        <Money value={summary.data?.grandTotal ?? '0'} style={styles.summaryValue} />
-        <Text style={styles.summaryMeta}>
-          {summary.data?.expenseCount ?? 0} entries
-        </Text>
+        {summary.isError ? (
+          <Text style={styles.summaryError}>Could not load summary</Text>
+        ) : (
+          <>
+            <Money value={summary.data?.grandTotal ?? '0'} style={styles.summaryValue} />
+            <Text style={styles.summaryMeta}>
+              {summary.data?.expenseCount ?? 0} entries
+            </Text>
+          </>
+        )}
       </View>
 
       <View style={styles.filterRow}>
@@ -272,6 +278,7 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 12, color: theme.colors.subtext },
   summaryValue: { fontSize: 28, fontWeight: '800', color: theme.colors.text, marginTop: 4 },
   summaryMeta: { fontSize: 12, color: theme.colors.subtext, marginTop: 4 },
+  summaryError: { fontSize: 13, color: theme.colors.danger, marginTop: 4 },
   filterRow: { paddingHorizontal: 16, marginBottom: 8 },
   searchInput: { backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: theme.colors.text },
   chipRow: { paddingHorizontal: 16, marginBottom: 8, flexGrow: 0 },
