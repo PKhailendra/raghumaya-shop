@@ -47,18 +47,21 @@ export default function ProductFormScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
 
-  // Prefill from scan (new product flow) — auto-generate SKU from name
+  // Prefill from scan (new product flow) — auto-generate unique SKU from name + barcode
   useEffect(() => {
     if (!isEdit && !initialized) {
       if (barcodeParam) setBarcode(barcodeParam);
       if (nameParam) {
         setName(nameParam);
-        // Auto-generate SKU: "Brooke Bond Red Label" → "brooke-bond-red-label"
-        const autoSku = nameParam
+        // Auto-generate SKU: "Brooke Bond Tea" + barcode "8901030893568" → "brooke-bond-tea-3568"
+        // Barcode suffix ensures uniqueness per shop (DB has @@unique([shopId, sku]))
+        const namePart = nameParam
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/^-|-$/g, '')
-          .slice(0, 40);
+          .slice(0, 30);
+        const barcodeSuffix = (barcodeParam ?? '').replace(/\D/g, '').slice(-4);
+        const autoSku = [namePart, barcodeSuffix].filter(Boolean).join('-');
         if (autoSku) setSku(autoSku);
       }
       if (barcodeParam || nameParam) setInitialized(true);
