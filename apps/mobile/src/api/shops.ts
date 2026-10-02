@@ -14,7 +14,11 @@ export function useFinanceDashboard(): UseQueryResult<FinanceDashboard> {
 export function useMyShops(): UseQueryResult<Shop[]> {
   return useQuery({
     queryKey: ['shops', 'mine'],
-    queryFn: () => api<Shop[]>('/shops'),
+    queryFn: async () => {
+      // API wraps the list as { data: [...] } — unwrap to a plain array
+      const res = await api<{ data: Shop[] } | Shop[]>('/shops');
+      return Array.isArray(res) ? res : (res.data ?? []);
+    },
   });
 }
 
