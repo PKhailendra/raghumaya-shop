@@ -40,16 +40,17 @@ export default function ScanScreen() {
   return (
     <View style={styles.container}>
       {!scanned ? (
-        <CameraView
-          style={styles.camera}
-          facing="back"
-          barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'qr'] }}
-          onBarcodeScanned={handleScan}
-        >
-          <View style={styles.overlay}>
+        <View style={styles.camera}>
+          <CameraView
+            style={StyleSheet.absoluteFill}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'qr'] }}
+            onBarcodeScanned={handleScan}
+          />
+          <View style={styles.overlay} pointerEvents="none">
             <Text style={styles.overlayText}>Point the camera at a barcode</Text>
           </View>
-        </CameraView>
+        </View>
       ) : (
         <View style={styles.result}>
           <Text style={styles.title}>Scanned code</Text>
