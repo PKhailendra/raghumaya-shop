@@ -144,7 +144,7 @@ export default function ProductFormScreen() {
           style={StyleSheet.absoluteFill}
           facing="back"
           barcodeScannerSettings={{
-            barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'qr'],
+            barcodeTypes: ['aztec', 'codabar', 'code39', 'code93', 'code128', 'datamatrix', 'ean13', 'ean8', 'itf14', 'pdf417', 'qr', 'upc_a', 'upc_e'],
           }}
           onBarcodeScanned={handleBarCodeScanned}
         />
