@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import {
+  Alert,
   FlatList,
   Modal,
   RefreshControl,
@@ -11,7 +12,8 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useProducts, useCategories, useProduct } from '../../src/api/products';
+import { useAuthStore } from '../../src/store/auth';
+import { useProducts, useCategories, useProduct, useDeleteProduct } from '../../src/api/products';
 import { AppHeader } from '../../src/components/AppHeader';
 import { SearchBar } from '../../src/components/SearchBar';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
@@ -21,6 +23,7 @@ import { Money } from '../../src/components/Money';
 import { formatDate } from '../../src/utils/format';
 import { Product } from '../../src/api/types';
 import { theme } from '../../src/theme';
+import { ApiError } from '../../src/api/client';
 
 function stockTone(p: Product): 'ok' | 'low' | 'out' {
   const stock = parseFloat(p.currentStock);
@@ -38,6 +41,8 @@ const badgeStyle = {
 
 export default function InventoryScreen() {
   const router = useRouter();
+  const can = useAuthStore((s) => s.can);
+  const canManage = can('INVENTORY_CREATE');
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState<string | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -110,6 +115,12 @@ export default function InventoryScreen() {
         <Text style={styles.scanFabText}>📷 Scan</Text>
       </TouchableOpacity>
 
+      {canManage && (
+        <TouchableOpacity style={[styles.scanFab, styles.addFab]} onPress={() => router.push('/inventory/product-form')}>
+          <Text style={styles.scanFabText}>+ Add</Text>
+        </TouchableOpacity>
+      )}
+
       <ProductDetailModal productId={selectedId} onClose={() => setSelectedId(null)} />
     </View>
   );
@@ -117,6 +128,37 @@ export default function InventoryScreen() {
 
 function ProductDetailModal(props: { productId: string | null; onClose: () => void }) {
   const { data, isLoading } = useProduct(props.productId ?? '');
+  const router = useRouter();
+  const can = useAuthStore((s) => s.can);
+  const canManage = can('INVENTORY_UPDATE');
+  const canDelete = can('INVENTORY_DELETE');
+  const del = useDeleteProduct();
+
+  const doDelete = () => {
+    if (!props.productId) return;
+    Alert.alert(
+      'Delete product?',
+      `"${data?.name}" will be removed from inventory. This cannot be undone.`,
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () =>
+            del.mutate(props.productId!, {
+              onSuccess: () => {
+                Alert.alert('Deleted', 'Product removed.');
+                props.onClose();
+              },
+              onError: (e) => {
+                Alert.alert('Failed', e instanceof ApiError ? e.message : 'Could not delete.');
+              },
+            }),
+        },
+      ],
+    );
+  };
+
   return (
     <Modal visible={!!props.productId} animationType="slide" onRequestClose={props.onClose}>
       <View style={styles.modal}>
@@ -142,6 +184,26 @@ function ProductDetailModal(props: { productId: string | null; onClose: () => vo
             <DetailRow label="Current stock" value={data.currentStock} />
             <DetailRow label="Min stock level" value={data.minStockLevel ?? '—'} />
             <DetailRow label="Added on" value={formatDate((data as { createdAt?: string }).createdAt)} />
+            {(canManage || canDelete) && (
+              <View style={styles.modalActions}>
+                {canManage && (
+                  <TouchableOpacity
+                    style={styles.editBtn}
+                    onPress={() => {
+                      props.onClose();
+                      router.push(`/inventory/product-form?id=${data.id}`);
+                    }}
+                  >
+                    <Text style={styles.editBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                )}
+                {canDelete && (
+                  <TouchableOpacity style={styles.deleteBtn} onPress={doDelete} disabled={del.isPending}>
+                    <Text style={styles.deleteBtnText}>{del.isPending ? 'Deleting…' : 'Delete'}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </ScrollView>
         )}
       </View>
@@ -178,11 +240,17 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: '700' },
   scanFab: { position: 'absolute', right: 16, bottom: 24, backgroundColor: theme.colors.primary, borderRadius: 999, paddingHorizontal: 20, paddingVertical: 14, elevation: 4 },
   scanFabText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  addFab: { right: 120, backgroundColor: theme.colors.success },
   modal: { flex: 1, backgroundColor: theme.colors.background, paddingTop: 48 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   modalTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
   closeBtn: { fontSize: 20, color: theme.colors.subtext, padding: 8 },
   modalBody: { padding: 16 },
+  modalActions: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  editBtn: { flex: 1, backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, paddingVertical: 12, alignItems: 'center' },
+  editBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  deleteBtn: { flex: 1, borderWidth: 1, borderColor: theme.colors.danger, borderRadius: theme.radius.sm, paddingVertical: 12, alignItems: 'center' },
+  deleteBtnText: { color: theme.colors.danger, fontWeight: '700', fontSize: 15 },
   detailName: { fontSize: 20, fontWeight: '700', color: theme.colors.text, marginBottom: 12 },
   detailRow: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   detailLabel: { flex: 1, fontSize: 14, color: theme.colors.subtext },

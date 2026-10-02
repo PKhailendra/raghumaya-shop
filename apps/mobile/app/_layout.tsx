@@ -61,6 +61,7 @@ function AuthGate() {
         <Stack.Screen name="daily-closing" options={{ headerShown: true, title: 'Daily Closing' }} />
         <Stack.Screen name="subscription" options={{ headerShown: true, title: 'Subscription' }} />
         <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings' }} />
+        <Stack.Screen name="inventory/product-form" options={{ presentation: 'modal', headerShown: true, title: 'Product' }} />
       </Stack>
     </View>
   );

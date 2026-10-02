@@ -1,4 +1,4 @@
-import { useQuery, UseQueryResult } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, UseQueryResult } from '@tanstack/react-query';
 import { api } from './client';
 import { Category, ListResponse, Product } from './types';
 
@@ -46,5 +46,54 @@ export function useCategories(): UseQueryResult<ListResponse<Category>> {
   return useQuery({
     queryKey: ['categories'],
     queryFn: () => api<ListResponse<Category>>('/inventory/categories'),
+  });
+}
+
+export interface ProductInput {
+  name: string;
+  sku?: string;
+  barcode?: string;
+  qrCode?: string;
+  categoryId?: string;
+  unit?: string;
+  purchasePrice?: string;
+  sellingPrice: string;
+  mrp?: string;
+  gstRate?: string;
+  currentStock?: string;
+  minStockLevel?: string;
+}
+
+export function useCreateProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ProductInput) =>
+      api<Product>('/inventory/products', { method: 'POST', body: payload }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
+}
+
+export function useUpdateProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<ProductInput> }) =>
+      api<Product>(`/inventory/products/${id}`, { method: 'PATCH', body: payload }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['products'] });
+      qc.invalidateQueries({ queryKey: ['products', vars.id] });
+    },
+  });
+}
+
+export function useDeleteProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ ok: boolean }>(`/inventory/products/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['products'] });
+    },
   });
 }
