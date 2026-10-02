@@ -31,7 +31,8 @@ const STATUS_BADGE: Record<AttendanceStatus, string> = {
 };
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export default function ShopAttendancePage() {
@@ -42,6 +43,7 @@ export default function ShopAttendancePage() {
   const [marks, setMarks] = useState<Record<string, AttendanceStatus>>({});
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
 
   const canMark = can("ATTENDANCE_MARK");
 
@@ -57,16 +59,23 @@ export default function ShopAttendancePage() {
     enabled: !!activeShopId,
   });
 
-  // Seed local marks from fetched records whenever date/data changes.
+  // Seed local marks from fetched records when date changes or on first load.
+  // Do NOT overwrite if user has unsaved edits (dirty flag).
   useEffect(() => {
+    if (dirty) return;
     const seed: Record<string, AttendanceStatus> = {};
     for (const d of records.data?.data ?? []) {
       const rec = d.records[0];
       if (rec) seed[d.member.membershipId] = rec.status;
     }
     setMarks(seed);
+  }, [records.data, date]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset dirty when date changes
+  useEffect(() => {
+    setDirty(false);
     setSaved(null);
-  }, [records.data, date]);
+  }, [date]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -77,6 +86,7 @@ export default function ShopAttendancePage() {
     onSuccess: () => {
       setSaved("Attendance saved.");
       setError(null);
+      setDirty(false);
       queryClient.invalidateQueries({ queryKey: ["shop", "attendance"] });
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : "Could not save attendance."),
@@ -86,6 +96,12 @@ export default function ShopAttendancePage() {
     const all: Record<string, AttendanceStatus> = {};
     for (const m of members.data ?? []) all[m.id] = status;
     setMarks(all);
+    setDirty(true);
+  };
+
+  const markOne = (id: string, status: AttendanceStatus) => {
+    setMarks((p) => ({ ...p, [id]: status }));
+    setDirty(true);
   };
 
   const rows = useMemo(() => {
@@ -125,7 +141,10 @@ export default function ShopAttendancePage() {
         <CardContent className="p-4">
           <div className="max-w-xs space-y-1">
             <Label htmlFor="att-date">Date</Label>
-            <Input id="att-date" type="date" value={date} max={todayStr()} onChange={(e) => setDate(e.target.value)} />
+            <Input id="att-date" type="date" value={date} max={todayStr()} onChange={(e) => {
+              const v = e.target.value;
+              if (v && v <= todayStr()) setDate(v);
+            }} />
           </div>
         </CardContent>
       </Card>
@@ -164,7 +183,7 @@ export default function ShopAttendancePage() {
                           key={o.value}
                           type="button"
                           title={o.label}
-                          onClick={() => setMarks((p) => ({ ...p, [m.id]: o.value }))}
+                          onClick={() => markOne(m.id, o.value)}
                           className={`rounded-md border px-1 py-2 text-xs font-semibold transition-colors ${
                             current === o.value
                               ? o.value === "PRESENT"

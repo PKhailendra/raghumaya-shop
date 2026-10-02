@@ -448,6 +448,14 @@ export async function createPayment(
       if (invoice.customerId) {
         await tx.customer.update({ where: { id: invoice.customerId }, data: { outstandingBalance: { decrement: amount } } });
       }
+    } else if (!purchase && input.direction === 'IN') {
+      // Customer-level payment (khata): reduce the customer's outstanding dues.
+      const custId = input.customerId;
+      if (custId) {
+        const cust = await tx.customer.findFirst({ where: { id: custId, shopId, deletedAt: null } });
+        if (!cust) throw new HttpError(404, 'CUSTOMER_NOT_FOUND', 'Customer not found in this shop');
+        await tx.customer.update({ where: { id: cust.id }, data: { outstandingBalance: { decrement: amount } } });
+      }
     }
     if (purchase) {
       await tx.purchase.update({ where: { id: purchase.id }, data: { paidAmount: purchase.paidAmount.add(amount) } });

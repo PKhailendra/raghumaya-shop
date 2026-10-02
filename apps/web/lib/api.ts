@@ -671,8 +671,8 @@ export const customersApi = {
     const raw = await get<ListResponse<Record<string, any>>>(`/customers/${id}/purchases`, params);
     return { data: raw.data.map(mapInvoice), meta: raw.meta };
   },
-  ledger: async (id: string): Promise<LedgerEntry[]> => {
-    const raw = await get<{ ledger?: Record<string, any>[] } | Record<string, any>[]>(`/customers/${id}/ledger`);
+  ledger: async (id: string, params?: { fromDate?: string; toDate?: string }): Promise<LedgerEntry[]> => {
+    const raw = await get<{ ledger?: Record<string, any>[] } | Record<string, any>[]>(`/customers/${id}/ledger`, params);
     const rows = Array.isArray(raw) ? raw : raw.ledger ?? [];
     return rows.map((e) => ({
       id: `${e.date ?? ""}-${e.reference ?? ""}-${e.referenceId ?? ""}`,
@@ -1295,4 +1295,73 @@ export const hrApi = {
     get<{ data: SalaryPaymentRecord[] }>("/hr/salary/payments", params),
   paySalary: (body: { membershipId: string; month: number; year: number; bonus?: string; deductions?: string; mode?: string; notes?: string }) =>
     post<{ data: { id: string; memberName: string; year: number; month: number; netPayable: string; status: string; carriedForward: string } }>("/hr/salary/pay", body),
+  loginSessions: (params?: { month?: number; year?: number }) =>
+    get<{ data: { id: string; accountId: string; loginAt: string; ipAddress?: string }[] }>("/hr/login-sessions", params),
+};
+
+export interface ExpenseRecord {
+  id: string;
+  category: "RENT" | "SALARY" | "UTILITIES" | "SUPPLIES" | "OTHER";
+  categoryName: string;
+  title: string;
+  amount: string;
+  expenseDate: string;
+  paymentMode: string | null;
+  paidBy: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface ExpenseSummary {
+  year: number;
+  month: number;
+  breakdown: { category: string; categoryName: string; total: string; count: number }[];
+  grandTotal: string;
+  expenseCount: number;
+}
+
+export const expensesApi = {
+  list: (params?: { page?: number; limit?: number; category?: string; search?: string; fromDate?: string; toDate?: string }) =>
+    get<ListResponse<ExpenseRecord>>("/expenses", params),
+  create: (body: { category: string; title: string; amount: string; expenseDate: string; paidBy?: string; paymentMode?: string; notes?: string }) =>
+    post<ExpenseRecord>("/expenses", body),
+  update: (id: string, body: { category?: string; title?: string; amount?: string; expenseDate?: string; paidBy?: string; paymentMode?: string; notes?: string }) =>
+    patch<ExpenseRecord>(`/expenses/${id}`, body),
+  remove: (id: string) => del<{ deleted: boolean }>(`/expenses/${id}`),
+  summary: (params: { year: number; month: number }) =>
+    get<ExpenseSummary>("/expenses/summary", params),
+  categories: () => get<{ data: { value: string; label: string }[] }>("/expenses/categories"),
+};
+
+export type DailyClosing = {
+  date: string;
+  sales: {
+    totalSales: string;
+    invoiceCount: number;
+    byStatus: { status: string; count: number; amount: string }[];
+    averageOrderValue: string;
+  };
+  collections: {
+    totalCollected: string;
+    byMode: { mode: string; count: number; amount: string }[];
+  };
+  credit: { newDue: string; dueInvoiceCount: number };
+  expenses: { totalExpenses: string; count: number };
+  salary: { salaryPaid: string; count: number };
+  cash: { netCash: string; note: string };
+  topProducts: { productId: string | null; description: string; quantity: string; revenue: string }[];
+  invoices: {
+    id: string;
+    invoiceNumber: string;
+    customerName: string | null;
+    status: string;
+    totalAmount: string;
+    paidAmount: string;
+    balanceAmount: string;
+    issueDate: string;
+  }[];
+};
+
+export const reportsApi = {
+  dailyClosing: (params?: { date?: string }) => get<DailyClosing>("/reports/daily-closing", params),
 };

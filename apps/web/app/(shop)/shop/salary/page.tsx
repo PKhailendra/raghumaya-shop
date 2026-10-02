@@ -36,13 +36,14 @@ export default function ShopSalaryPage() {
 
   const [year, month] = useMemo(() => {
     const [y, m] = monthStr.split("-").map(Number);
+    if (!y || !m || m < 1 || m > 12) return [new Date().getFullYear(), new Date().getMonth() + 1];
     return [y, m];
   }, [monthStr]);
 
   const slips = useQuery({
     queryKey: ["shop", "salary", year, month],
     queryFn: () => hrApi.salarySlips({ month, year }),
-    enabled: !!activeShopId,
+    enabled: !!activeShopId && !!year && !!month,
   });
 
   const members = useQuery({
@@ -72,7 +73,7 @@ export default function ShopSalaryPage() {
   const staffOptions = useMemo(() => {
     const withSlip = new Set(rows.map((r) => r.member.membershipId));
     return (members.data ?? [])
-      .filter((m) => m.status === "ACTIVE" || !m.status)
+      .filter((m) => (m.status === "ACTIVE" || !m.status) && m.role !== "OWNER")
       .map((m) => ({ value: m.id, label: `${m.name || "Staff"} (${toTitle(m.role)})`, hasSlip: withSlip.has(m.id) }));
   }, [members.data, rows]);
 
@@ -338,13 +339,18 @@ function SalaryDialog({ membershipId, name, current, onClose, onDone }: { member
 
 function AdvanceDialog({ membershipId, name, onClose, onDone }: { membershipId: string; name: string; onClose: () => void; onDone: () => void }) {
   const [amount, setAmount] = useState("");
-  const [advDate, setAdvDate] = useState(new Date().toISOString().slice(0, 10));
+  const localToday = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const [advDate, setAdvDate] = useState(localToday());
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || Number(amount) <= 0) return setError("Enter a valid amount.");
+    if (advDate > localToday()) return setError("Advance date cannot be in the future.");
     setBusy(true);
     try {
       await hrApi.recordAdvance({ membershipId, amount, advanceDate: advDate, notes: notes || undefined });
@@ -367,7 +373,9 @@ function AdvanceDialog({ membershipId, name, onClose, onDone }: { membershipId: 
           </div>
           <div className="space-y-2">
             <Label htmlFor="adv-date">Date</Label>
-            <Input id="adv-date" type="date" value={advDate} onChange={(e) => setAdvDate(e.target.value)} />
+            <Input id="adv-date" type="date" value={advDate} max={localToday()} onChange={(e) => {
+              if (e.target.value <= localToday()) setAdvDate(e.target.value);
+            }} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="adv-notes">Notes</Label>
@@ -393,6 +401,8 @@ function PayDialog({ membershipId, name, net, month, year, onClose, onDone }: { 
   const preview = Math.max(0, Number(net) + Number(bonus || 0) - Number(deductions || 0));
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (bonus && Number(bonus) < 0) return setError("Bonus cannot be negative.");
+    if (deductions && Number(deductions) < 0) return setError("Deductions cannot be negative.");
     setBusy(true);
     try {
       const res = await hrApi.paySalary({

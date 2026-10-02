@@ -922,6 +922,7 @@ model Expense {
   expenseDate DateTime         @default(now())
   paymentMode PaymentMode?
   notes       String?          @db.VarChar(1000)
+  paidBy      String?          @db.VarChar(200)
   createdById String?          @db.Uuid
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
@@ -1309,4 +1310,19 @@ model SalaryPayment {
   @@unique([shopId, membershipId, year, month])
   @@index([shopId, year, month])
   @@map("salary_payments")
+}
+
+model LoginSession {
+  id          String    @id @default(uuid()) @db.Uuid
+  accountId   String    @db.Uuid
+  shopId      String?   @db.Uuid
+  loginAt     DateTime  @default(now())
+  logoutAt    DateTime?
+  ipAddress   String?   @db.VarChar(50)
+  userAgent   String?   @db.VarChar(500)
+  createdAt   DateTime  @default(now())
+
+  @@index([accountId, loginAt])
+  @@index([shopId, loginAt])
+  @@map("login_sessions")
 }

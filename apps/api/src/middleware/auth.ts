@@ -111,7 +111,7 @@ export function requireShopContextOrAdmin(req: Request, _res: Response, next: Ne
   requireShopContext(req, _res, next);
 }
 
-function isPlatformAdmin(actor: Actor | undefined): boolean {
+export function isPlatformAdmin(actor: Actor | undefined): boolean {
   return !!actor && actor.actorType === 'admin' && (actor.adminRole === 'SUPER_ADMIN' || actor.adminRole === 'ADMIN');
 }
 

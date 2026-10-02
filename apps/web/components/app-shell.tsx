@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
+import { useLang } from "@/lib/lang";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
@@ -122,6 +123,7 @@ export function AppShell({
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex-1" />
+          <LangToggle />
           <DropdownMenu>
             <DropdownMenuTrigger>
               <button className="flex items-center gap-2 rounded-md p-1 hover:bg-accent">
@@ -180,5 +182,18 @@ export function ShopSwitcher() {
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+  );
+}
+
+function LangToggle() {
+  const { lang, setLang } = useLang();
+  return (
+    <button
+      onClick={() => setLang(lang === "en" ? "hi" : "en")}
+      className="rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent"
+      title={lang === "en" ? "हिंदी में देखें" : "View in English"}
+    >
+      {lang === "en" ? "हिंदी" : "English"}
+    </button>
   );
 }

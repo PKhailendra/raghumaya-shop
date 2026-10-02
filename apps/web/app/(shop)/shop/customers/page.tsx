@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Can } from "@/lib/shop-context";
-import { Search, Plus, MessageCircle, Send } from "lucide-react";
+import { Search, Plus, MessageCircle, Send, BookOpen } from "lucide-react";
 
 export default function ShopCustomersPage() {
   const [page, setPage] = useState(1);
@@ -109,6 +109,7 @@ export default function ShopCustomersPage() {
                             {c.name}
                           </Link>
                           <div className="text-xs text-muted-foreground">{c.email ?? "-"}</div>
+                          <Link href={`/shop/customers/${c.id}`} className="text-xs text-primary hover:underline">Khata →</Link>
                         </TableCell>
                         <TableCell>{c.phone ?? "-"}</TableCell>
                         <TableCell className="text-right">
@@ -183,10 +184,16 @@ function DueList({ query }: { query: ReturnType<typeof useQuery> }) {
                 <TableCell>
                   <Link href={`/shop/customers/${c.id}`} className="font-medium hover:underline">{c.name}</Link>
                   <div className="text-xs text-muted-foreground">{c.phone ?? "-"}</div>
+                  <Link href={`/shop/customers/${c.id}`} className="text-xs text-primary hover:underline">Khata dekhein →</Link>
                 </TableCell>
                 <TableCell className="text-right font-semibold">{inr(c.dueAmount)}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
+                    <Link href={`/shop/customers/${c.id}`}>
+                      <Button size="sm" variant="outline">
+                        <BookOpen className="h-3.5 w-3.5 mr-1" /> Khata
+                      </Button>
+                    </Link>
                     <Button size="sm" variant="outline" disabled={busyId === c.id + "sms"} onClick={() => remind(c.id, "sms")}>
                       <Send className="h-3.5 w-3.5 mr-1" /> SMS
                     </Button>

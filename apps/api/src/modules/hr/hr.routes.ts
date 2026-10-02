@@ -39,4 +39,6 @@ r.get('/salary', salView, validateRequest({ query: salaryQuerySchema }), c.getSa
 r.get('/salary/payments', salView, validateRequest({ query: salaryQuerySchema }), c.getPayments);
 r.post('/salary/pay', salManage, validateRequest({ body: salaryPaySchema }), c.postPay);
 
+r.get('/login-sessions', attView, validateRequest({ query: salaryQuerySchema }), c.getLoginSessions);
+
 export default r;

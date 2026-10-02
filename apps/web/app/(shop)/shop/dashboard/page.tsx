@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { analyticsApi, ApiError } from "@/lib/api";
+import { analyticsApi, stockApi, ApiError } from "@/lib/api";
 import { inr } from "@/lib/format";
 import { PageHeader, ErrorState, CardsSkeleton, EmptyState } from "@/components/states";
 import { StatCard } from "@/components/stat-card";
@@ -18,6 +18,7 @@ export default function ShopDashboardPage() {
   const monthly = useQuery({ queryKey: ["shop", "analytics", "sales-monthly"], queryFn: () => analyticsApi.salesMonthly({ months: 12 }) });
   const topProducts = useQuery({ queryKey: ["shop", "analytics", "top-products"], queryFn: () => analyticsApi.topProducts({ limit: 5 }) });
   const topCustomers = useQuery({ queryKey: ["shop", "analytics", "top-customers"], queryFn: () => analyticsApi.topCustomers({ limit: 5 }) });
+  const lowStock = useQuery({ queryKey: ["shop", "inventory", "low-stock"], queryFn: () => stockApi.lowStockAlerts() });
 
   if (summary.isLoading) {
     return (
@@ -56,11 +57,40 @@ export default function ShopDashboardPage() {
         <StatCard title="Total products" value={String(d.totalProducts ?? 0)} icon={Package} sub={`${d.totalCustomers ?? 0} customers`} />
       </div>
 
+      {(lowStock.data?.length ?? 0) > 0 && (
+        <Card className="mt-6 border-amber-200 bg-amber-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-800">
+              <AlertCircle className="h-5 w-5" />
+              Low stock alert ({lowStock.data!.length} items)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow><TableHead>Product</TableHead><TableHead>Stock</TableHead><TableHead>Min level</TableHead></TableRow>
+              </TableHeader>
+              <TableBody>
+                {lowStock.data!.slice(0, 5).map((s: { id: string; productName: string; productId: string; quantity: number; minLevel?: number }) => (
+                  <TableRow key={s.id}>
+                    <TableCell>{s.productName || s.productId}</TableCell>
+                    <TableCell className="text-red-600 font-medium">{s.quantity}</TableCell>
+                    <TableCell>{s.minLevel ?? "-"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <a href="/shop/inventory?lowStock=true" className="text-sm text-blue-600 hover:underline mt-2 inline-block">
+              View all low stock items →
+            </a>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="mt-6">
         <CardHeader>
           <CardTitle>Sales trend</CardTitle>
-        </CardHeader>
-        <CardContent>
+        </CardHeader>        <CardContent>
           <Tabs defaultValue="daily">
             <TabsList>
               <TabsTrigger value="daily">Daily</TabsTrigger>

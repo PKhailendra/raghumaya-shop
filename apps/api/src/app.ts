@@ -16,11 +16,13 @@ import billingRoutes from './modules/billing/billing.routes';
 import customerRoutes from './modules/customers/customers.routes';
 import financeRoutes from './modules/finance/finance.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
+import reportsRoutes from './modules/reports/reports.routes';
 import subscriptionRoutes from './modules/subscriptions/subscriptions.routes';
 import referralRoutes from './modules/referrals/referrals.routes';
 import auditRoutes from './modules/audit/audit.routes';
 import notificationRoutes from './modules/notifications/notifications.routes';
 import hrRoutes from './modules/hr/hr.routes';
+import expensesRoutes from './modules/expenses/expenses.routes';
 import adminRoutes from './modules/admin/admin.routes';
 
 export function createApp() {
@@ -55,11 +57,13 @@ export function createApp() {
   v1.use('/customers', customerRoutes);
   v1.use('/finance', financeRoutes);
   v1.use('/analytics', analyticsRoutes);
+  v1.use('/reports', reportsRoutes);
   v1.use('/subscriptions', subscriptionRoutes);
   v1.use('/referrals', referralRoutes);
   v1.use('/audit', auditRoutes);
   v1.use('/notifications', notificationRoutes);
   v1.use('/hr', hrRoutes);
+  v1.use('/expenses', expensesRoutes);
   v1.use('/admin', adminRoutes);
   app.use('/api/v1', v1);
 

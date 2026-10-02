@@ -7,14 +7,19 @@ import { AppShell, ShopSwitcher } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth";
 import { ShopProvider, useShop } from "@/lib/shop-context";
 import { SHOP_NAV, firstAllowedPath } from "@/lib/shop-nav";
+import { useLang } from "@/lib/lang";
 
 function ShopShell({ children }: { children: React.ReactNode }) {
   const { account, loading, activeShopId } = useAuth();
   const { can, loading: shopLoading } = useShop();
+  const { t } = useLang();
   const router = useRouter();
   const pathname = usePathname();
 
-  const items = useMemo(() => SHOP_NAV.filter((n) => !n.permission || can(n.permission)), [can]);
+  const items = useMemo(
+    () => SHOP_NAV.filter((n) => !n.permission || can(...(Array.isArray(n.permission) ? n.permission : [n.permission]))).map((n) => ({ ...n, label: t(n.label) })),
+    [can, t]
+  );
   const allowedHrefs = useMemo(() => new Set(items.map((i) => i.href)), [items]);
 
   useEffect(() => {

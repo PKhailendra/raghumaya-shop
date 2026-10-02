@@ -806,3 +806,38 @@ export const salaryQuerySchema = z.object({
   month: z.coerce.number().int().min(1).max(12).optional(),
   membershipId: uuidSchema.optional(),
 });
+
+/* ------------------------------------------------------------------ */
+/* Expense Tracker (standalone /api/v1/expenses on the Expense model)  */
+/* ------------------------------------------------------------------ */
+
+export const EXPENSE_CATEGORIES = ['RENT', 'SALARY', 'UTILITIES', 'SUPPLIES', 'OTHER'] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export const expenseTrackerDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD');
+
+export const expenseTrackerCreateSchema = z.object({
+  category: z.enum(EXPENSE_CATEGORIES),
+  title: z.string().trim().min(1, 'Description is required').max(200),
+  amount: moneySchema,
+  expenseDate: expenseTrackerDateSchema,
+  paidBy: z.string().trim().max(200).optional(),
+  paymentMode: z.enum(PAYMENT_MODES).optional(),
+  notes: z.string().trim().max(1000).optional(),
+});
+
+export const expenseTrackerUpdateSchema = expenseTrackerCreateSchema.partial();
+
+export const expenseTrackerQuerySchema = paginationSchema.extend({
+  category: z.enum(EXPENSE_CATEGORIES).optional(),
+  search: z.string().trim().max(100).optional(),
+  fromDate: expenseTrackerDateSchema.optional(),
+  toDate: expenseTrackerDateSchema.optional(),
+});
+
+export const expenseTrackerSummarySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+});

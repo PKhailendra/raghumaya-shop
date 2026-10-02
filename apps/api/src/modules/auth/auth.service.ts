@@ -377,6 +377,17 @@ export async function login(
 
   const { tokens, actor } = await issueTokenPair(identity, device, ctx);
   await writeAudit({ ...ctx, actor, action: 'LOGIN', entityType: identity.kind, entityId: identity.row.id, category: 'AUTH' });
+  // Track login session for staff attendance (login time)
+  try {
+    await prisma.loginSession.create({
+      data: {
+        accountId: identity.row.id,
+        shopId: actor.activeShopId ?? null,
+        ipAddress: ctx.ip,
+        userAgent: ctx.userAgent,
+      },
+    });
+  } catch { /* non-critical */ }
   return { ...tokens, actor: { ...summary, activeShopId: actor.activeShopId ?? null } };
 }
 

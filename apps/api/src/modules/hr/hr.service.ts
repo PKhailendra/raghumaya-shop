@@ -92,6 +92,13 @@ export async function markAttendance(
   markedById?: string,
 ) {
   const date = parseDate(input.date);
+  // Security M1: no future dates, and no dates older than 60 days (prevent backdating fraud)
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const minDate = new Date(today);
+  minDate.setUTCDate(minDate.getUTCDate() - 60);
+  if (date > today) throw new HttpError(400, 'INVALID_DATE', 'Cannot mark attendance for future dates');
+  if (date < minDate) throw new HttpError(400, 'INVALID_DATE', 'Cannot mark attendance older than 60 days');
   const staffIds = new Set((await staffList(shopId)).map((s) => s.membershipId));
   const results: { membershipId: string; status: AttendanceStatus }[] = [];
   for (const r of input.records) {
@@ -375,31 +382,40 @@ export async function paySalary(
   const totalAdv = Number(slip.advances);
   const excess = Math.round((totalAdv - gross) * 100) / 100;
 
-  const rec = await prisma.salaryPayment.create({
-    data: {
-      shopId,
-      membershipId: input.membershipId,
-      year: input.year,
-      month: input.month,
-      monthlySalary: D(slip.monthlySalary),
-      totalDays: slip.totalDays,
-      presentDays: D(slip.presentDays),
-      absentDays: D(slip.absentDays),
-      leaveDays: D(slip.leaveDays),
-      unmarkedDays: slip.unmarkedDays,
-      grossPayable: D(slip.grossPayable),
-      advances: D(slip.advances),
-      bonus: D(bonus.toFixed(2)),
-      deductions: D(deductions.toFixed(2)),
-      netPayable: D(net.toFixed(2)),
-      paidAmount: D(net.toFixed(2)),
-      status: 'PAID',
-      paidAt: new Date(),
-      paidById,
-      mode: input.mode,
-      notes: input.notes,
-    },
-  });
+  let rec;
+  try {
+    rec = await prisma.salaryPayment.create({
+      data: {
+        shopId,
+        membershipId: input.membershipId,
+        year: input.year,
+        month: input.month,
+        monthlySalary: D(slip.monthlySalary),
+        totalDays: slip.totalDays,
+        presentDays: D(slip.presentDays),
+        absentDays: D(slip.absentDays),
+        leaveDays: D(slip.leaveDays),
+        unmarkedDays: slip.unmarkedDays,
+        grossPayable: D(slip.grossPayable),
+        advances: D(slip.advances),
+        bonus: D(bonus.toFixed(2)),
+        deductions: D(deductions.toFixed(2)),
+        netPayable: D(net.toFixed(2)),
+        paidAmount: D(net.toFixed(2)),
+        status: 'PAID',
+        paidAt: new Date(),
+        paidById,
+        mode: input.mode,
+        notes: input.notes,
+      },
+    });
+  } catch (e) {
+    // Race condition: parallel pay requests — DB unique constraint wins, return clean 409
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      throw new HttpError(409, 'SALARY_ALREADY_PAID', 'Salary for this month is already recorded');
+    }
+    throw e;
+  }
 
   let carriedForward = 0;
   if (excess > 0) {

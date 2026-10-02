@@ -229,8 +229,14 @@ function InvoiceBuilder({ onClose, onDone }: { onClose: () => void; onDone: () =
   const customers = useQuery({ queryKey: ["shop", "customers", "all"], queryFn: () => customersApi.list({ page: 1, limit: 100 }) });
   const products = useQuery({ queryKey: ["shop", "products", "all"], queryFn: () => inventoryApi.products({ page: 1, limit: 100 }) });
 
-  const updateItem = (i: number, patch: Partial<LineItem>) =>
+  const updateItem = (i: number, patch: Partial<LineItem>) => {
+    // Clamp discount to 0-100 to prevent negative taxable amounts
+    if (patch.discountRate !== undefined) {
+      const d = Number(patch.discountRate);
+      if (!isNaN(d)) patch.discountRate = String(Math.min(100, Math.max(0, d)));
+    }
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  };
 
   const pickProduct = (i: number, productId: string) => {
     const p = ((products.data?.data ?? []) as Product[]).find((x) => x.id === productId);
