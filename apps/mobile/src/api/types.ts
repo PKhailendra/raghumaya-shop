@@ -262,10 +262,21 @@ export interface TopProduct {
 
 export interface FinanceDashboard {
   totalRevenue: string;
+  invoiceRevenue: string;
+  manualRevenue: string;
   totalExpenses: string;
-  netProfit: string;
-  totalAssets: string;
-  totalLiabilities: string;
+  grossProfit: string;
+  cashIn: string;
+  cashOut: string;
+  netCashFlow: string;
+  assetValue: string;
+  outstandingLiabilities: string;
+  taxPayable: string;
+  cgst: string;
+  sgst: string;
+  igst: string;
+  invoiceCount: number;
+  range?: { fromDate: string; toDate: string };
 }
 
 export interface SubscriptionInfo {
