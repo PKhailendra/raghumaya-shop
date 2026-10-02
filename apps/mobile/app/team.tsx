@@ -25,10 +25,10 @@ export default function TeamScreen() {
         list.map((m) => (
           <View key={m.id} style={styles.row}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{(m.name ?? '?').charAt(0).toUpperCase()}</Text>
+              <Text style={styles.avatarText}>{m.name.charAt(0).toUpperCase()}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{m.name ?? 'Unknown member'}</Text>
+              <Text style={styles.name}>{m.name}</Text>
               <Text style={styles.meta}>{m.email ?? m.phone ?? m.role}</Text>
             </View>
             <View style={styles.chips}>

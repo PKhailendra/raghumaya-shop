@@ -69,6 +69,14 @@ export interface ShopMember {
   phone?: string | null;
   role: string;
   status: string;
+  // API nests identity under `account`; flattened into name/email/phone by useShopMembers
+  account?: {
+    id?: string;
+    fullName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    status?: string;
+  } | null;
 }
 
 // ---- Inventory ----
