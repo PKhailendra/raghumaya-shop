@@ -3,7 +3,7 @@ import { ApiErrorBody } from './types';
 
 const baseUrl =
   (process.env as Record<string, string | undefined>).EXPO_PUBLIC_API_URL ??
-  'http://localhost:4000/api/v1';
+  'https://raghumaya-api-production.up.railway.app/api/v1';
 
 export class ApiError extends Error {
   status: number;
