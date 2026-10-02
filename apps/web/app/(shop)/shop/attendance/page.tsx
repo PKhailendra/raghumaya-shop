@@ -47,7 +47,7 @@ export default function ShopAttendancePage() {
 
   const members = useQuery({
     queryKey: ["shop", "members"],
-    queryFn: () => shopsApi.members(activeShopId!),
+    queryFn: async () => (await shopsApi.members(activeShopId!)).filter((m) => m.role !== "OWNER"),
     enabled: !!activeShopId && canMark,
   });
 
@@ -191,7 +191,7 @@ export default function ShopAttendancePage() {
       )}
 
       <Can any={["ATTENDANCE_MARK"]}>
-        <div className="sticky bottom-4 mt-4 flex justify-end">
+        <div className="sticky bottom-4 mt-4 flex justify-end pb-16">
           <Button size="lg" onClick={() => save.mutate()} disabled={save.isPending || markedCount === 0} className="shadow-lg">
             {save.isPending ? "Saving…" : `Save attendance (${markedCount})`}
           </Button>
