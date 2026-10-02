@@ -162,14 +162,17 @@ function merge(parts: (PartialProduct | null)[], sourceNames: string[]): Enriche
 
 /**
  * Normalize a scanned barcode for lookup/storage.
- * UPC-A (12 digits) is a subset of EAN-13 — prepend a leading zero so the
- * value matches what's printed on the box and what databases index.
- * Other formats (EAN-13, Code128 alphanumerics, etc.) are left untouched.
+ * ONLY UPC-A (12 digits, type 'upc_a') gets a leading zero to become EAN-13 —
+ * this matches what's printed on the box and what databases index.
+ * All other barcode types are left untouched.
  */
-export function normalizeBarcode(raw: string): string {
-  const digits = raw.replace(/\D/g, '');
-  if (digits.length === 12) return `0${digits}`;
-  return raw.trim();
+export function normalizeBarcode(raw: string, barcodeType?: string): string {
+  const value = raw.trim();
+  if (barcodeType === 'upc_a') {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length === 12) return `0${digits}`;
+  }
+  return value;
 }
 
 /**

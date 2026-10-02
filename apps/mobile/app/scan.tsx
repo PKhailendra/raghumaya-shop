@@ -76,11 +76,11 @@ export default function ScanScreen() {
     );
   }
 
-  const handleScan = ({ data }: { data: string }) => {
+  const handleScan = ({ data, type }: { data: string; type: string }) => {
     if (scanned) return;
     setScanned(true);
     // Normalize UPC-A (12-digit) → EAN-13 so the value matches the printed code
-    setCode(normalizeBarcode(data));
+    setCode(normalizeBarcode(data, type));
   };
 
   const reset = () => {

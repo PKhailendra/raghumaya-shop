@@ -121,10 +121,10 @@ export default function ProductFormScreen() {
     setScanning(true);
   };
 
-  const handleBarCodeScanned = ({ data }: { data: string }) => {
+  const handleBarCodeScanned = ({ data, type }: { data: string; type: string }) => {
     setScanning(false);
     setTorchOn(false);
-    setBarcode(normalizeBarcode(data));
+    setBarcode(normalizeBarcode(data, type));
   };
 
   const submit = () => {
