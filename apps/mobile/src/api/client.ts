@@ -1,5 +1,13 @@
-import { useAuthStore } from '../store/auth';
 import { ApiErrorBody } from './types';
+
+// Lazy access to the auth store to avoid a require cycle:
+// auth.ts imports `api` from this module, so we must not import auth.ts
+// at module top-level. Zustand's getState() is safe to call lazily.
+function getAuthState() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useAuthStore } = require('../store/auth') as typeof import('../store/auth');
+  return useAuthStore.getState();
+}
 
 const baseUrl =
   (process.env as Record<string, string | undefined>).EXPO_PUBLIC_API_URL ??
@@ -20,7 +28,7 @@ let refreshPromise: Promise<boolean> | null = null;
 async function doRefresh(): Promise<boolean> {
   if (refreshPromise) return refreshPromise;
   refreshPromise = (async () => {
-    const { refreshToken, setTokens, clearAuth } = useAuthStore.getState();
+    const { refreshToken, setTokens, clearAuth } = getAuthState();
     if (!refreshToken) return false;
     try {
       const res = await fetch(`${baseUrl}/auth/refresh`, {
@@ -43,7 +51,7 @@ async function doRefresh(): Promise<boolean> {
   })();
   const ok = await refreshPromise;
   if (!ok) {
-    await useAuthStore.getState().clearAuth();
+    await getAuthState().clearAuth();
   }
   return ok;
 }
@@ -59,7 +67,7 @@ interface RequestOptions {
 }
 
 export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const { accessToken } = useAuthStore.getState();
+  const { accessToken } = getAuthState();
   const url = new URL(`${baseUrl}${path}`);
   if (opts.query) {
     for (const [k, v] of Object.entries(opts.query)) {
