@@ -161,11 +161,23 @@ function merge(parts: (PartialProduct | null)[], sourceNames: string[]): Enriche
 }
 
 /**
+ * Normalize a scanned barcode for lookup/storage.
+ * UPC-A (12 digits) is a subset of EAN-13 — prepend a leading zero so the
+ * value matches what's printed on the box and what databases index.
+ * Other formats (EAN-13, Code128 alphanumerics, etc.) are left untouched.
+ */
+export function normalizeBarcode(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 12) return `0${digits}`;
+  return raw.trim();
+}
+
+/**
  * Look up a barcode across all free sources and return merged product data.
  * Returns null when no source knows the barcode (or at least its name).
  */
 export async function lookupBarcode(barcode: string): Promise<EnrichedProduct | null> {
-  const code = barcode.trim();
+  const code = normalizeBarcode(barcode);
   if (!code) return null;
 
   const results = await Promise.allSettled([

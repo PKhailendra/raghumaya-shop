@@ -16,6 +16,7 @@ import {
   useUpdateProduct,
   ProductInput,
 } from '../../src/api/products';
+import { normalizeBarcode } from '../../src/api/barcodeLookup';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
 import { ApiError } from '../../src/api/client';
 import { theme } from '../../src/theme';
@@ -122,7 +123,8 @@ export default function ProductFormScreen() {
 
   const handleBarCodeScanned = ({ data }: { data: string }) => {
     setScanning(false);
-    setBarcode(data);
+    setTorchOn(false);
+    setBarcode(normalizeBarcode(data));
   };
 
   const submit = () => {

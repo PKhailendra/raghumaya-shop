@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'reac
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useProductLookup, useUpdateProduct } from '../src/api/products';
-import { lookupBarcode, type EnrichedProduct } from '../src/api/barcodeLookup';
+import { lookupBarcode, normalizeBarcode, type EnrichedProduct } from '../src/api/barcodeLookup';
 import { useInvoiceBuilder } from '../src/store/invoiceBuilder';
 import { LoadingSpinner } from '../src/components/LoadingSpinner';
 import { Money } from '../src/components/Money';
@@ -79,7 +79,8 @@ export default function ScanScreen() {
   const handleScan = ({ data }: { data: string }) => {
     if (scanned) return;
     setScanned(true);
-    setCode(data);
+    // Normalize UPC-A (12-digit) → EAN-13 so the value matches the printed code
+    setCode(normalizeBarcode(data));
   };
 
   const reset = () => {
