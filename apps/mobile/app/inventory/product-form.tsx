@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Alert,
   ScrollView,
@@ -44,18 +44,20 @@ export default function ProductFormScreen() {
   const [scanning, setScanning] = useState(false);
 
   // Prefill when editing
-  if (isEdit && existing && !initialized) {
-    setName(existing.name ?? '');
-    setSku(existing.sku ?? '');
-    setBarcode(existing.barcode ?? '');
-    setSellingPrice(existing.sellingPrice ?? '');
-    setPurchasePrice(existing.purchasePrice ?? '');
-    setMrp(existing.mrp ?? '');
-    setCurrentStock(existing.currentStock ?? '');
-    setMinStockLevel(existing.minStockLevel ?? '');
-    setUnit(existing.unit ?? 'pcs');
-    setInitialized(true);
-  }
+  useEffect(() => {
+    if (isEdit && existing && !initialized) {
+      setName(existing.name ?? '');
+      setSku(existing.sku ?? '');
+      setBarcode(existing.barcode ?? '');
+      setSellingPrice(existing.sellingPrice ?? '');
+      setPurchasePrice(existing.purchasePrice ?? '');
+      setMrp(existing.mrp ?? '');
+      setCurrentStock(existing.currentStock ?? '');
+      setMinStockLevel(existing.minStockLevel ?? '');
+      setUnit(existing.unit ?? 'pcs');
+      setInitialized(true);
+    }
+  }, [isEdit, existing, initialized]);
 
   const startScan = async () => {
     if (!permission?.granted) {
