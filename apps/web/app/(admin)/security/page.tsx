@@ -55,9 +55,9 @@ export default function AdminSecurityPage() {
                   <TableBody>
                     {(loginHistory.data?.data ?? []).map((r, i) => {
                       const row = r as unknown as { action?: string; success?: boolean; email?: string; accountId?: string; ipAddress?: string; userAgent?: string; createdAt?: string };
-                      const success = row.action ? row.action === "LOGIN_SUCCESS" : row.success !== false;
+                      const success = row.action ? row.action === "LOGIN" : row.success !== false;
                       const label = row.action
-                        ? row.action === "LOGIN_SUCCESS"
+                        ? row.action === "LOGIN"
                           ? "Success"
                           : row.action === "LOGIN_FAILED"
                             ? "Failed"

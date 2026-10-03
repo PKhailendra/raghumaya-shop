@@ -264,8 +264,11 @@ export async function platformAuditLogs(
     prisma.auditLog.count({ where }),
   ]);
   void ctx;
-  const accountIds = [...new Set(rows.filter((r) => r.actorType === 'account').map((r) => r.actorId))];
-  const adminIds = [...new Set(rows.filter((r) => r.actorType === 'admin').map((r) => r.actorId))];
+  // actorId is VarChar(80) and may hold non-UUID values like 'system'.
+  // Only valid UUIDs can be queried against the UUID-typed id columns.
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const accountIds = [...new Set(rows.filter((r) => r.actorType === 'account').map((r) => r.actorId).filter((id) => uuidRe.test(id)))];
+  const adminIds = [...new Set(rows.filter((r) => r.actorType === 'admin').map((r) => r.actorId).filter((id) => uuidRe.test(id)))];
   const [accounts, admins] = await Promise.all([
     accountIds.length ? prisma.account.findMany({ where: { id: { in: accountIds } }, select: { id: true, fullName: true, email: true } }) : [],
     adminIds.length ? prisma.admin.findMany({ where: { id: { in: adminIds } }, select: { id: true, fullName: true, email: true } }) : [],
@@ -886,7 +889,7 @@ export async function updateSettings(ctx: ReqCtx, input: Record<string, unknown>
 export async function loginHistory(query: { page: number; limit: number; accountId?: string; fromDate?: string; toDate?: string }) {
   const { skip, take } = getPagination(query.page, query.limit);
   const where: Prisma.AuditLogWhereInput = {
-    action: { in: ['LOGIN_SUCCESS', 'LOGIN_FAILED', 'LOGOUT'] },
+    action: { in: ['LOGIN', 'LOGIN_FAILED', 'LOGOUT'] },
     deletedAt: null,
     ...(query.accountId ? { actorId: query.accountId } : {}),
     ...(query.fromDate || query.toDate ? { createdAt: { ...(query.fromDate ? { gte: parseDate(query.fromDate)! } : {}), ...(query.toDate ? { lte: parseDate(query.toDate)! } : {}) } } : {}),
@@ -895,10 +898,14 @@ export async function loginHistory(query: { page: number; limit: number; account
     prisma.auditLog.findMany({ where, skip, take, orderBy: { createdAt: 'desc' } }),
     prisma.auditLog.count({ where }),
   ]);
-  const actorIds = [...new Set(rows.map((r) => r.actorId))];
+  // actorId is VarChar(80) and may hold non-UUID values like 'system' (failed logins
+  // have no authenticated actor). Only valid UUIDs can be queried against the
+  // UUID-typed account/admin id columns — otherwise Postgres throws.
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const actorIds = [...new Set(rows.map((r) => r.actorId).filter((id) => uuidRe.test(id)))];
   const [accounts, admins] = await Promise.all([
-    prisma.account.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, email: true } }),
-    prisma.admin.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, email: true } }),
+    actorIds.length ? prisma.account.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, email: true } }) : [],
+    actorIds.length ? prisma.admin.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, email: true } }) : [],
   ]);
   const whoOf = new Map([...accounts, ...admins].map((a) => [a.id, a]));
   return {

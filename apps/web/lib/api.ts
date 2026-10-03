@@ -1235,10 +1235,10 @@ export const adminApi = {
     return {
       data: raw.data.map((r) => ({
         ...r,
-        email: r.actor?.email ?? null,
+        email: r.actor?.email ?? (r.metadata as { emailOrPhone?: string } | null)?.emailOrPhone ?? null,
         fullName: r.actor?.fullName ?? null,
         accountId: r.actorId,
-        success: r.action === "LOGIN_SUCCESS",
+        success: r.action === "LOGIN",
       })),
       meta: raw.meta,
     };
