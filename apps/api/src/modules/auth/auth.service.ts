@@ -16,6 +16,7 @@ import {
   verifyRefreshToken,
 } from '../../lib/crypto';
 import { writeAudit } from '../../lib/audit';
+import { sendShopWelcomeEmail } from '../../lib/email';
 import { deviceFingerprint, sendSms } from '../../lib/helpers';
 import { getPagination, pageMeta } from '../../lib/utils';
 import { env, isProduction } from '../../config/env';
@@ -197,10 +198,11 @@ export async function registerShopOwner(
     state?: string;
     pincode?: string;
     gstNumber?: string;
+    shopType?: 'RETAIL' | 'WHOLESALE' | 'DISTRIBUTOR' | 'SERVICE' | 'MANUFACTURING' | 'ONLINE' | 'OTHER';
   },
   device: DeviceInfo,
   ctx: ReqCtx,
-): Promise<{ account: unknown; shop: unknown; tokens: TokenPair }> {
+): Promise<{ account: unknown; shop: unknown; tokens: TokenPair; credentialsEmailed: boolean }> {
   const existing = await prisma.account.findFirst({
     where: { OR: [{ phone: input.phone }, ...(input.email ? [{ email: input.email }] : [])], deletedAt: null },
   });
@@ -223,11 +225,15 @@ export async function registerShopOwner(
         name: input.shopName,
         ownerAccountId: account.id,
         phone: input.shopPhone ?? input.phone,
+        // Keep the shop's own contact email in sync with the owner email so it
+        // reflects on the admin shop list/detail pages.
+        email: input.email,
         address: input.shopAddress,
         city: input.city,
         state: input.state,
         pincode: input.pincode,
         gstNumber: input.gstNumber,
+        shopType: input.shopType ?? 'RETAIL',
         status: 'ACTIVE',
       },
     });
@@ -281,10 +287,25 @@ export async function registerShopOwner(
     metadata: { shopName: result.shop.name },
   });
 
+  // Email the login credentials to the owner so they can sign in anytime and
+  // change their password later. Never fails shop creation if email is off.
+  let credentialsEmailed = false;
+  if (result.account.email) {
+    credentialsEmailed = await sendShopWelcomeEmail({
+      to: result.account.email,
+      ownerName: result.account.fullName,
+      shopName: result.shop.name,
+      loginId: result.account.email,
+      phone: result.account.phone,
+      password: input.password,
+    });
+  }
+
   return {
     account: { id: result.account.id, fullName: result.account.fullName, email: result.account.email, phone: result.account.phone },
     shop: { id: result.shop.id, name: result.shop.name },
     tokens,
+    credentialsEmailed,
   };
 }
 
