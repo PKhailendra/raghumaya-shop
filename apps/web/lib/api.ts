@@ -312,6 +312,7 @@ export type ProductBatch = {
   manufacturingDate?: string;
   expiryDate?: string;
 };
+export type ProductImage = { id?: string; url: string; isPrimary?: boolean; sortOrder?: number };
 export type Product = {
   id: string;
   name: string;
@@ -333,6 +334,7 @@ export type Product = {
   reorderLevel?: number;
   isActive?: boolean;
   unit?: string;
+  images?: ProductImage[];
   variants?: ProductVariant[];
   batches?: ProductBatch[];
   createdAt: string;

@@ -280,6 +280,20 @@ function ProductEditor({
   const [stock, setStock] = useState(product ? String(product.currentStock) : "0");
   const [reorderLevel, setReorderLevel] = useState(product?.reorderLevel != null ? String(product.reorderLevel) : "0");
   const [isActive, setIsActive] = useState(product?.isActive ?? true);
+  const [images, setImages] = useState<{ url: string; isPrimary: boolean }[]>(
+    product?.images?.map((img) => ({ url: img.url, isPrimary: !!img.isPrimary })) ?? []
+  );
+  const [variants, setVariants] = useState<{
+    name: string; sku: string; barcode: string; qrCode: string;
+    purchasePrice: string; sellingPrice: string; currentStock: string;
+  }[]>(
+    product?.variants?.map((v) => ({
+      name: v.name ?? "", sku: v.sku ?? "", barcode: v.barcode ?? "", qrCode: "",
+      purchasePrice: (v as { purchasePrice?: string }).purchasePrice ?? "",
+      sellingPrice: v.price ?? "",
+      currentStock: v.stockQuantity != null ? String(v.stockQuantity) : "",
+    })) ?? []
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -288,6 +302,7 @@ function ProductEditor({
     setError(null);
     if (!name.trim()) return setError("Product name is required.");
     if (!sku.trim()) return setError("SKU is required.");
+    if (!categoryId) return setError("Category is required — it powers the inventory filters.");
     if (!sellingPrice || Number(sellingPrice) <= 0) return setError("Selling price must be greater than 0.");
     const stockNum = Number(stock);
     if (!Number.isFinite(stockNum) || stockNum < 0) return setError("Stock must be a non-negative number.");
@@ -313,6 +328,20 @@ function ProductEditor({
         currentStock: stockNum,
         reorderLevel: reorderNum,
         isActive,
+        images: images.filter((img) => img.url.trim()).map((img, i) => ({
+          url: img.url.trim(),
+          isPrimary: img.isPrimary,
+          sortOrder: i,
+        })),
+        variants: variants.filter((v) => v.name.trim()).map((v) => ({
+          name: v.name.trim(),
+          ...(v.sku.trim() ? { sku: v.sku.trim() } : {}),
+          ...(v.barcode.trim() ? { barcode: v.barcode.trim() } : {}),
+          ...(v.qrCode.trim() ? { qrCode: v.qrCode.trim() } : {}),
+          ...(v.purchasePrice.trim() ? { purchasePrice: v.purchasePrice.trim() } : {}),
+          ...(v.sellingPrice.trim() ? { sellingPrice: v.sellingPrice.trim() } : {}),
+          ...(v.currentStock.trim() ? { currentStock: v.currentStock.trim() } : {}),
+        })),
       };
       if (product) await inventoryApi.updateProduct(product.id, body);
       else await inventoryApi.createProduct(body);
@@ -350,8 +379,8 @@ function ProductEditor({
               <Input id="p-qrcode" value={qrCode} onChange={(e) => setQrCode(e.target.value)} placeholder="QR code value" />
             </div>
             <div className="space-y-2">
-              <Label>Category <span className="text-muted-foreground">(optional)</span></Label>
-              <Select value={categoryId} onChange={setCategoryId} placeholder="No category" options={[{ value: "", label: "No category" }, ...categories]} />
+              <Label>Category *</Label>
+              <Select value={categoryId} onChange={setCategoryId} placeholder="Select category" options={[{ value: "", label: "Select category" }, ...categories]} />
             </div>
             <div className="space-y-2">
               <Label>Brand <span className="text-muted-foreground">(optional)</span></Label>
@@ -400,6 +429,104 @@ function ProductEditor({
               </label>
             </div>
           </div>
+
+          <div className="space-y-3 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-semibold">Product images <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Button type="button" variant="outline" size="sm" onClick={() => setImages([...images, { url: "", isPrimary: images.length === 0 }])}>
+                + Add image
+              </Button>
+            </div>
+            {images.map((img, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Input
+                  value={img.url}
+                  onChange={(e) => setImages(images.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))}
+                  placeholder="https://… image URL"
+                  className="flex-1"
+                />
+                <label className="flex items-center gap-1 text-xs whitespace-nowrap cursor-pointer">
+                  <input
+                    type="radio"
+                    name="primary-image"
+                    checked={img.isPrimary}
+                    onChange={() => setImages(images.map((x, j) => ({ ...x, isPrimary: j === i })))}
+                  />
+                  Primary
+                </label>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setImages(images.filter((_, j) => j !== i))}>
+                  ✕
+                </Button>
+              </div>
+            ))}
+            {images.length === 0 && <p className="text-xs text-muted-foreground">No images yet. Paste an image URL or leave empty.</p>}
+          </div>
+
+          <div className="space-y-3 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-semibold">Variants <span className="text-muted-foreground font-normal">(optional — e.g. 500g / 1kg packs)</span></Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setVariants([...variants, { name: "", sku: "", barcode: "", qrCode: "", purchasePrice: "", sellingPrice: "", currentStock: "" }])}
+              >
+                + Add variant
+              </Button>
+            </div>
+            {variants.map((v, i) => (
+              <div key={i} className="rounded-md border p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-muted-foreground">Variant {i + 1}</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setVariants(variants.filter((_, j) => j !== i))}>
+                    Remove
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    value={v.name}
+                    onChange={(e) => setVariants(variants.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                    placeholder="Variant name * (e.g. 500g)"
+                  />
+                  <Input
+                    value={v.sku}
+                    onChange={(e) => setVariants(variants.map((x, j) => (j === i ? { ...x, sku: e.target.value } : x)))}
+                    placeholder="SKU (optional)"
+                  />
+                  <Input
+                    value={v.barcode}
+                    onChange={(e) => setVariants(variants.map((x, j) => (j === i ? { ...x, barcode: e.target.value } : x)))}
+                    placeholder="Barcode (optional)"
+                  />
+                  <Input
+                    value={v.qrCode}
+                    onChange={(e) => setVariants(variants.map((x, j) => (j === i ? { ...x, qrCode: e.target.value } : x)))}
+                    placeholder="QR code (optional)"
+                  />
+                  <Input
+                    type="number" min="0" step="0.01"
+                    value={v.purchasePrice}
+                    onChange={(e) => setVariants(variants.map((x, j) => (j === i ? { ...x, purchasePrice: e.target.value } : x)))}
+                    placeholder="Purchase price (optional)"
+                  />
+                  <Input
+                    type="number" min="0" step="0.01"
+                    value={v.sellingPrice}
+                    onChange={(e) => setVariants(variants.map((x, j) => (j === i ? { ...x, sellingPrice: e.target.value } : x)))}
+                    placeholder="Selling price (optional)"
+                  />
+                  <Input
+                    type="number" min="0" step="1"
+                    value={v.currentStock}
+                    onChange={(e) => setVariants(variants.map((x, j) => (j === i ? { ...x, currentStock: e.target.value } : x)))}
+                    placeholder="Stock (optional)"
+                  />
+                </div>
+              </div>
+            ))}
+            {variants.length === 0 && <p className="text-xs text-muted-foreground">No variants yet. Add if this product sells in multiple packs/sizes.</p>}
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
             <Button type="submit" disabled={busy}>{busy ? "Saving…" : product ? "Save changes" : "Add product"}</Button>

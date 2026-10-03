@@ -35,6 +35,7 @@ export default function ProductFormScreen() {
     description: descriptionParam,
     packSize: packSizeParam,
     model: modelParam,
+    imageUrl: imageUrlParam,
   } = useLocalSearchParams<{
     id?: string;
     barcode?: string;
@@ -44,6 +45,7 @@ export default function ProductFormScreen() {
     description?: string;
     packSize?: string;
     model?: string;
+    imageUrl?: string;
   }>();
   const isEdit = !!id;
 
@@ -70,6 +72,11 @@ export default function ProductFormScreen() {
   const [unit, setUnit] = useState('pcs');
   const [isActive, setIsActive] = useState(true);
   const [pickerFor, setPickerFor] = useState<'category' | 'brand' | null>(null);
+  const [images, setImages] = useState<{ url: string; isPrimary: boolean }[]>([]);
+  const [variants, setVariants] = useState<{
+    name: string; sku: string; barcode: string; qrCode: string;
+    purchasePrice: string; sellingPrice: string; currentStock: string;
+  }[]>([]);
   const [initialized, setInitialized] = useState(false);
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -125,9 +132,11 @@ export default function ProductFormScreen() {
         descriptionParam ?? '',
       ].filter(Boolean).join('\n');
       if (extras) setDescription(extras);
+      // Auto-fill product image from lookup (used as-is, in English)
+      if (imageUrlParam) setImages([{ url: imageUrlParam, isPrimary: true }]);
       if (barcodeParam || nameParam) setInitialized(true);
     }
-  }, [isEdit, barcodeParam, nameParam, brandParam, categoryParam, descriptionParam, packSizeParam, modelParam, brandsData, categoriesData, initialized]);
+  }, [isEdit, barcodeParam, nameParam, brandParam, categoryParam, descriptionParam, packSizeParam, modelParam, imageUrlParam, brandsData, categoriesData, initialized]);
   useEffect(() => {
     if (isEdit && existing && !initialized) {
       setName(existing.name ?? '');
@@ -146,6 +155,14 @@ export default function ProductFormScreen() {
       setMinStockLevel(existing.minStockLevel ?? '');
       setUnit(existing.unit ?? 'pcs');
       setIsActive((existing as { isActive?: boolean }).isActive ?? true);
+      const exImgs = (existing as { images?: { url: string; isPrimary?: boolean }[] }).images ?? [];
+      if (exImgs.length) setImages(exImgs.map((img) => ({ url: img.url, isPrimary: !!img.isPrimary })));
+      const exVars = (existing as { variants?: { name: string; sku?: string; barcode?: string; qrCode?: string; purchasePrice?: string; sellingPrice?: string; price?: string; currentStock?: string; stockQuantity?: number }[] }).variants ?? [];
+      if (exVars.length) setVariants(exVars.map((v) => ({
+        name: v.name ?? '', sku: v.sku ?? '', barcode: v.barcode ?? '', qrCode: v.qrCode ?? '',
+        purchasePrice: v.purchasePrice ?? '', sellingPrice: v.sellingPrice ?? v.price ?? '',
+        currentStock: v.currentStock ?? (v.stockQuantity != null ? String(v.stockQuantity) : ''),
+      })));
       setInitialized(true);
     }
   }, [isEdit, existing, initialized]);
@@ -172,6 +189,10 @@ export default function ProductFormScreen() {
       Alert.alert('Missing name', 'Product name is required.');
       return;
     }
+    if (!categoryId) {
+      Alert.alert('Missing category', 'Please select a category — it powers the inventory filters.');
+      return;
+    }
     const price = parseFloat(sellingPrice);
     if (Number.isNaN(price) || price < 0) {
       Alert.alert('Invalid price', 'Enter a valid selling price.');
@@ -180,10 +201,10 @@ export default function ProductFormScreen() {
     const payload: ProductInput = {
       name: name.trim(),
       sellingPrice: price.toFixed(2),
+      categoryId,
       ...(sku.trim() ? { sku: sku.trim() } : {}),
       ...(barcode.trim() ? { barcode: barcode.trim() } : {}),
       ...(qrCode.trim() ? { qrCode: qrCode.trim() } : {}),
-      ...(categoryId ? { categoryId } : {}),
       ...(brandId ? { brandId } : {}),
       ...(description.trim() ? { description: description.trim() } : {}),
       ...(purchasePrice.trim() ? { purchasePrice: parseFloat(purchasePrice).toFixed(2) } : {}),
@@ -194,6 +215,22 @@ export default function ProductFormScreen() {
       ...(minStockLevel.trim() ? { minStockLevel: minStockLevel.trim(), reorderLevel: minStockLevel.trim() } : {}),
       ...(unit.trim() ? { unit: unit.trim() } : {}),
       isActive,
+      ...(images.filter((img) => img.url.trim()).length
+        ? { images: images.filter((img) => img.url.trim()).map((img, i) => ({ url: img.url.trim(), isPrimary: img.isPrimary, sortOrder: i })) }
+        : {}),
+      ...(variants.filter((v) => v.name.trim()).length
+        ? {
+            variants: variants.filter((v) => v.name.trim()).map((v) => ({
+              name: v.name.trim(),
+              ...(v.sku.trim() ? { sku: v.sku.trim() } : {}),
+              ...(v.barcode.trim() ? { barcode: v.barcode.trim() } : {}),
+              ...(v.qrCode.trim() ? { qrCode: v.qrCode.trim() } : {}),
+              ...(v.purchasePrice.trim() ? { purchasePrice: v.purchasePrice.trim() } : {}),
+              ...(v.sellingPrice.trim() ? { sellingPrice: v.sellingPrice.trim() } : {}),
+              ...(v.currentStock.trim() ? { currentStock: v.currentStock.trim() } : {}),
+            })),
+          }
+        : {}),
     };
     const onSuccess = () => {
       Alert.alert('Saved', `Product ${isEdit ? 'updated' : 'created'} successfully.`);
@@ -279,10 +316,10 @@ export default function ProductFormScreen() {
       <Text style={styles.label}>QR Code (optional)</Text>
       <TextInput style={styles.input} value={qrCode} onChangeText={setQrCode} placeholder="QR code value" placeholderTextColor={theme.colors.muted} />
 
-      <Text style={styles.label}>Category (optional)</Text>
+      <Text style={styles.label}>Category *</Text>
       <TouchableOpacity style={styles.input} onPress={() => setPickerFor('category')}>
         <Text style={categoryId ? styles.pickerValue : styles.pickerPlaceholder}>
-          {categoryName(categoryId) || 'Select category'}
+          {categoryName(categoryId) || 'Select category (required for filters)'}
         </Text>
       </TouchableOpacity>
 
@@ -355,6 +392,76 @@ export default function ProductFormScreen() {
         <Text style={styles.toggleValue}>{isActive ? '✅ Yes' : '❌ No'}</Text>
       </TouchableOpacity>
 
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Product images (optional)</Text>
+        <TouchableOpacity onPress={() => setImages([...images, { url: '', isPrimary: images.length === 0 }])}>
+          <Text style={styles.addBtn}>+ Add image</Text>
+        </TouchableOpacity>
+      </View>
+      {images.map((img, i) => (
+        <View key={i} style={styles.imageRow}>
+          <TextInput
+            style={[styles.input, styles.imageInput]}
+            value={img.url}
+            onChangeText={(t) => setImages(images.map((x, j) => (j === i ? { ...x, url: t } : x)))}
+            placeholder="https://… image URL"
+            placeholderTextColor={theme.colors.muted}
+            autoCapitalize="none"
+          />
+          <TouchableOpacity onPress={() => setImages(images.map((x, j) => ({ ...x, isPrimary: j === i })))}>
+            <Text style={styles.primaryToggle}>{img.isPrimary ? '⭐' : '☆'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setImages(images.filter((_, j) => j !== i))}>
+            <Text style={styles.removeBtn}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
+      {images.length === 0 && <Text style={styles.hint}>No images yet. Auto-filled from barcode lookup when available.</Text>}
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Variants (optional)</Text>
+        <TouchableOpacity onPress={() => setVariants([...variants, { name: '', sku: '', barcode: '', qrCode: '', purchasePrice: '', sellingPrice: '', currentStock: '' }])}>
+          <Text style={styles.addBtn}>+ Add variant</Text>
+        </TouchableOpacity>
+      </View>
+      {variants.map((v, i) => (
+        <View key={i} style={styles.variantCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.variantTitle}>Variant {i + 1}</Text>
+            <TouchableOpacity onPress={() => setVariants(variants.filter((_, j) => j !== i))}>
+              <Text style={styles.removeBtn}>Remove</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.label}>Variant name *</Text>
+          <TextInput style={styles.input} value={v.name} onChangeText={(t) => setVariants(variants.map((x, j) => (j === i ? { ...x, name: t } : x)))} placeholder="e.g. 500g pack" placeholderTextColor={theme.colors.muted} />
+          <Text style={styles.label}>SKU (optional)</Text>
+          <TextInput style={styles.input} value={v.sku} onChangeText={(t) => setVariants(variants.map((x, j) => (j === i ? { ...x, sku: t } : x)))} placeholder="Optional" placeholderTextColor={theme.colors.muted} />
+          <View style={styles.row}>
+            <View style={styles.half}>
+              <Text style={styles.label}>Barcode</Text>
+              <TextInput style={styles.input} value={v.barcode} onChangeText={(t) => setVariants(variants.map((x, j) => (j === i ? { ...x, barcode: t } : x)))} placeholder="Optional" placeholderTextColor={theme.colors.muted} keyboardType="numeric" />
+            </View>
+            <View style={styles.half}>
+              <Text style={styles.label}>QR code</Text>
+              <TextInput style={styles.input} value={v.qrCode} onChangeText={(t) => setVariants(variants.map((x, j) => (j === i ? { ...x, qrCode: t } : x)))} placeholder="Optional" placeholderTextColor={theme.colors.muted} />
+            </View>
+          </View>
+          <View style={styles.row}>
+            <View style={styles.half}>
+              <Text style={styles.label}>Purchase price</Text>
+              <TextInput style={styles.input} value={v.purchasePrice} onChangeText={(t) => setVariants(variants.map((x, j) => (j === i ? { ...x, purchasePrice: t } : x)))} placeholder="Optional" placeholderTextColor={theme.colors.muted} keyboardType="decimal-pad" />
+            </View>
+            <View style={styles.half}>
+              <Text style={styles.label}>Selling price</Text>
+              <TextInput style={styles.input} value={v.sellingPrice} onChangeText={(t) => setVariants(variants.map((x, j) => (j === i ? { ...x, sellingPrice: t } : x)))} placeholder="Optional" placeholderTextColor={theme.colors.muted} keyboardType="decimal-pad" />
+            </View>
+          </View>
+          <Text style={styles.label}>Stock (optional)</Text>
+          <TextInput style={styles.input} value={v.currentStock} onChangeText={(t) => setVariants(variants.map((x, j) => (j === i ? { ...x, currentStock: t } : x)))} placeholder="0" placeholderTextColor={theme.colors.muted} keyboardType="decimal-pad" />
+        </View>
+      ))}
+      {variants.length === 0 && <Text style={styles.hint}>No variants yet. Add if this product sells in multiple packs/sizes.</Text>}
+
       <TouchableOpacity style={[styles.saveBtn, pending && styles.saveBtnDisabled]} onPress={submit} disabled={pending}>
         <Text style={styles.saveBtnText}>{pending ? 'Saving…' : isEdit ? 'Save changes' : 'Add product'}</Text>
       </TouchableOpacity>
@@ -421,6 +528,16 @@ const styles = StyleSheet.create({
   pickerItemText: { fontSize: 15, color: theme.colors.text },
   pickerCancel: { marginTop: 12, alignItems: 'center', paddingVertical: 10 },
   pickerCancelText: { fontSize: 15, fontWeight: '700', color: theme.colors.primary },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 4 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
+  addBtn: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
+  hint: { fontSize: 12, color: theme.colors.muted, marginTop: 4 },
+  imageRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 8 },
+  imageInput: { flex: 1 },
+  primaryToggle: { fontSize: 22 },
+  removeBtn: { fontSize: 14, fontWeight: '700', color: theme.colors.danger ?? '#d32f2f' },
+  variantCard: { backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, padding: 12, marginTop: 8 },
+  variantTitle: { fontSize: 13, fontWeight: '700', color: theme.colors.subtext },
   scannerWrap: { flex: 1, backgroundColor: '#000' },
   scannerOverlay: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 120 },
   scannerText: { color: '#fff', fontSize: 16, fontWeight: '600', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },

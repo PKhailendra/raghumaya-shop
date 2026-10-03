@@ -61,6 +61,7 @@ export default function ScanScreen() {
       ...(extProduct.description ? { description: extProduct.description } : {}),
       ...(extProduct.weightOrSize ? { packSize: extProduct.weightOrSize } : {}),
       ...(extProduct.model ? { model: extProduct.model } : {}),
+      ...(extProduct.imageUrl ? { imageUrl: extProduct.imageUrl } : {}),
     });
     return `/inventory/product-form?${q.toString()}`;
   };

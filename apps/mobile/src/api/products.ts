@@ -75,6 +75,17 @@ export interface ProductInput {
   minStockLevel?: string;
   reorderLevel?: string;
   isActive?: boolean;
+  images?: { url: string; isPrimary?: boolean; sortOrder?: number }[];
+  variants?: {
+    name: string;
+    sku?: string;
+    barcode?: string;
+    qrCode?: string;
+    purchasePrice?: string;
+    sellingPrice?: string;
+    currentStock?: string;
+    reorderLevel?: string;
+  }[];
 }
 
 export function useCreateProduct() {
