@@ -26,7 +26,8 @@ const ACCOUNT_KEY = "rms_account";
 
 async function loadMemberships(): Promise<Account["memberships"]> {
   try {
-    const shops = await shopsApi.myShops();
+    const res = await shopsApi.myShops();
+    const shops = Array.isArray(res) ? res : (res as unknown as { data?: Record<string, any>[] })?.data ?? [];
     return (shops ?? []).map((s: Record<string, any>) => ({
       shopId: String(s.id),
       shopName: String(s.name ?? "Shop"),
