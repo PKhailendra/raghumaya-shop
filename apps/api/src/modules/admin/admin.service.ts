@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma';
 import { hashPassword } from '../../lib/crypto';
 import { writeAudit } from '../../lib/audit';
 import { sendShopWelcomeEmail } from '../../lib/email';
+import { parseUserAgent } from '../../lib/helpers';
 import { getPagination, pageMeta, parseDate } from '../../lib/utils';
 import { HttpError } from '../../middleware/errorHandler';
 import type { PlanCode } from '@raghumaya/shared';
@@ -944,7 +945,20 @@ export async function listAllDevices(query: { page: number; limit: number; searc
   ]);
   const whoOf = new Map([...accounts, ...admins].map((a) => [a.id, a]));
   return {
-    data: rows.map((r) => ({ ...r, owner: whoOf.get(r.actorId) ?? null, revoked: r.revokedAt != null })),
+    data: rows.map((r) => {
+      // Fallback for devices registered before UA parsing existed (name/type
+      // are null in DB): parse the stored userAgent on the fly.
+      const parsed = !r.name ? parseUserAgent(r.userAgent) : null;
+      return {
+        ...r,
+        name: r.name ?? parsed?.name ?? null,
+        type: r.type ?? parsed?.type ?? null,
+        platform: r.platform ?? parsed?.platform ?? null,
+        browser: r.browser ?? parsed?.browser ?? null,
+        owner: whoOf.get(r.actorId) ?? null,
+        revoked: r.revokedAt != null,
+      };
+    }),
     meta: pageMeta(total, query.page, query.limit),
   };
 }

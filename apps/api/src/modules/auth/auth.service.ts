@@ -17,7 +17,7 @@ import {
 } from '../../lib/crypto';
 import { writeAudit } from '../../lib/audit';
 import { sendShopWelcomeEmail } from '../../lib/email';
-import { deviceFingerprint, sendSms } from '../../lib/helpers';
+import { deviceFingerprint, parseUserAgent, sendSms } from '../../lib/helpers';
 import { getPagination, pageMeta } from '../../lib/utils';
 import { env, isProduction } from '../../config/env';
 import { HttpError } from '../../middleware/errorHandler';
@@ -40,13 +40,16 @@ interface DeviceInfo {
 
 export function deviceInfoFromReq(req: Request): DeviceInfo {
   const { fingerprint, fields } = deviceFingerprint(req);
+  // Web browsers don't send x-device-* headers — parse the User-Agent so the
+  // Security > Devices page shows real info instead of "Unknown device".
+  const parsed = !fields.deviceName ? parseUserAgent(fields.userAgent) : null;
   return {
     deviceId: fields.deviceId || fingerprint.slice(0, 16),
     fingerprint,
-    name: fields.deviceName,
-    type: fields.deviceType,
-    platform: fields.devicePlatform,
-    browser: fields.deviceBrowser,
+    name: fields.deviceName ?? parsed?.name,
+    type: fields.deviceType ?? parsed?.type,
+    platform: fields.devicePlatform ?? parsed?.platform,
+    browser: fields.deviceBrowser ?? parsed?.browser,
     userAgent: fields.userAgent,
     ip: fields.ip,
   };
@@ -728,7 +731,17 @@ export async function listDevices(ctx: ReqCtx) {
     where: { actorType: actor.actorType, actorId, deletedAt: null },
     orderBy: { lastSeenAt: 'desc' },
   });
-  return rows.map((d) => ({ ...d, fingerprint: `${d.fingerprint.slice(0, 12)}…` }));
+  return rows.map((d) => {
+    const parsed = !d.name ? parseUserAgent(d.userAgent) : null;
+    return {
+      ...d,
+      name: d.name ?? parsed?.name ?? null,
+      type: d.type ?? parsed?.type ?? null,
+      platform: d.platform ?? parsed?.platform ?? null,
+      browser: d.browser ?? parsed?.browser ?? null,
+      fingerprint: `${d.fingerprint.slice(0, 12)}…`,
+    };
+  });
 }
 
 export function fingerprintFromReq(req: Request): { fingerprint: string; fields: Record<string, string | undefined> } {

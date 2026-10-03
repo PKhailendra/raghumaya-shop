@@ -99,10 +99,17 @@ export default function AdminSecurityPage() {
               {(devices.data?.data ?? []).map((d) => (
                 <Card key={d.id}>
                   <CardHeader>
-                    <CardTitle className="text-base">{d.deviceName}</CardTitle>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      {d.deviceName}
+                      {d.deviceType && d.deviceType !== "desktop" && (
+                        <Badge variant="secondary" className="text-[10px]">{toTitle(d.deviceType)}</Badge>
+                      )}
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm space-y-1">
-                    <div className="text-muted-foreground">{d.deviceType ?? "Unknown device"}</div>
+                    <div className="text-muted-foreground">
+                      {[d.browser, d.platform].filter(Boolean).join(" • ") || d.deviceType || "Unknown device"}
+                    </div>
                     <div className="text-xs text-muted-foreground">IP: {d.ipAddress ?? "-"}</div>
                     <div className="text-xs text-muted-foreground">Last used: {formatDateTime(d.lastUsedAt)}</div>
                   </CardContent>

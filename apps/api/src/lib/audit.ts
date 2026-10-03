@@ -23,6 +23,8 @@ export interface AuditInput {
   oldValue?: unknown;
   newValue?: unknown;
   ipAddress?: string;
+  /** Alias for ipAddress — ReqCtx carries `ip`, so `{...ctx}` spreads work. */
+  ip?: string;
   userAgent?: string;
   tx?: TxClient;
 }
@@ -59,7 +61,7 @@ export async function writeAudit(input: AuditInput): Promise<void> {
       metadata: toJson(input.metadata) as never,
       oldValue: toJson(input.oldValue) as never,
       newValue: toJson(input.newValue) as never,
-      ipAddress: input.ipAddress,
+      ipAddress: input.ipAddress ?? input.ip,
       userAgent: input.userAgent,
     },
   });

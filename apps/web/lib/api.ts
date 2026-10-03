@@ -200,6 +200,8 @@ export type Device = {
   id: string;
   deviceName: string;
   deviceType?: string;
+  platform?: string;
+  browser?: string;
   ipAddress?: string;
   lastUsedAt?: string;
   createdAt: string;
@@ -209,6 +211,8 @@ const mapDevice = (d: Record<string, any>): Device => ({
   id: d.id,
   deviceName: d.deviceName ?? d.name ?? "Unknown device",
   deviceType: d.deviceType ?? d.type,
+  platform: d.platform,
+  browser: d.browser,
   ipAddress: d.ipAddress,
   lastUsedAt: d.lastUsedAt ?? d.lastSeenAt,
   createdAt: d.createdAt,
