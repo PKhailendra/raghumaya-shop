@@ -117,9 +117,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Drop every cached shop query so dashboard/customers/products/sales/finance
     // refetch against the newly selected shop instead of showing stale data.
     // ShopProvider refreshes role/permissions automatically via activeShopId.
+    // Use a full reload to guarantee the dashboard remounts with fresh data —
+    // router.replace alone may not remount if already on /shop/dashboard.
     await queryClient.invalidateQueries();
-    router.replace("/shop/dashboard");
-  }, [account, router]);
+    queryClient.clear();
+    window.location.href = "/shop/dashboard";
+  }, [account]);
 
   const value = useMemo<AuthState>(
     () => ({
