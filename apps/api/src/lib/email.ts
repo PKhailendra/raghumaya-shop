@@ -1,18 +1,24 @@
 import nodemailer from 'nodemailer';
 import { env } from '../config/env';
+import { gmailApiTransport, isGmailApiConfigured } from './gmailApiTransport';
 
 /**
- * Outgoing email via Resend HTTP API (preferred) or SMTP (fallback).
+ * Outgoing email — nodemailer throughout.
+ * Transport priority:
+ *   1. Gmail API over HTTPS (custom nodemailer transport) — works where
+ *      outbound SMTP ports are blocked (e.g. Railway), sends from your
+ *      own Gmail address. Needs GMAIL_CLIENT_ID/SECRET/REFRESH_TOKEN.
+ *   2. Resend HTTP API (no SMTP ports needed). Needs RESEND_API_KEY.
+ *   3. Plain SMTP. Needs SMTP_HOST/USER/PASS.
+ *
  * All settings are optional — when nothing is configured, sending is skipped
  * gracefully (returns false) instead of failing the calling operation.
- *
- * Resend is preferred on hosts that block outbound SMTP (e.g. Railway free
- * tier blocks ports 25/587/465). Get a free API key at https://resend.com
- * (100 emails/day, no credit card). Set RESEND_API_KEY and RESEND_FROM.
  */
 
 export function isEmailConfigured(): boolean {
-  return Boolean(env.RESEND_API_KEY || (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS));
+  return Boolean(
+    isGmailApiConfigured() || env.RESEND_API_KEY || (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS),
+  );
 }
 
 /** Send via Resend's HTTPS API — no SMTP ports needed. */
@@ -54,7 +60,24 @@ function transporter() {
 export async function sendEmail(opts: { to: string; subject: string; html: string; text?: string }): Promise<boolean> {
   if (!isEmailConfigured()) return false;
   try {
-    // Prefer Resend HTTP API (works where SMTP ports are blocked).
+    // 1. Gmail API over HTTPS via nodemailer custom transport (owner's Gmail).
+    if (isGmailApiConfigured()) {
+      const send = nodemailer
+        .createTransport(gmailApiTransport())
+        .sendMail({
+          from: env.SMTP_FROM ?? env.SMTP_USER,
+          to: opts.to,
+          subject: opts.subject,
+          html: opts.html,
+          text: opts.text,
+        });
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Gmail API timed out')), 25000),
+      );
+      await Promise.race([send, timeout]);
+      return true;
+    }
+    // 2. Resend HTTP API (works where SMTP ports are blocked).
     if (env.RESEND_API_KEY) {
       const send = sendViaResend(opts);
       const timeout = new Promise<never>((_, reject) =>

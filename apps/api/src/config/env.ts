@@ -33,6 +33,15 @@ const envSchema = z.object({
   // Get a free key at https://resend.com — no credit card needed.
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM: z.string().optional(),
+  // Gmail API over HTTPS (nodemailer custom transport) — works where SMTP
+  // ports are blocked, sends from your own Gmail address.
+  // 1. Create OAuth 2.0 credentials (Desktop app) at
+  //    https://console.cloud.google.com/apis/credentials
+  // 2. Get a refresh token at https://developers.google.com/oauthplayground
+  //    using scope https://www.googleapis.com/auth/gmail.send
+  GMAIL_CLIENT_ID: z.string().optional(),
+  GMAIL_CLIENT_SECRET: z.string().optional(),
+  GMAIL_REFRESH_TOKEN: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
