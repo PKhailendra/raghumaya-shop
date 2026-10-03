@@ -365,6 +365,72 @@ export async function createShopOwner(
   };
 }
 
+/**
+ * Create a new shop for an EXISTING owner account (super admin only).
+ * Used when one owner runs multiple shops — no new account is created,
+ * the shop is linked to the given account with an OWNER membership.
+ */
+export async function createShopForOwner(
+  ctx: ReqCtx,
+  input: {
+    ownerAccountId: string;
+    shopName: string;
+    email?: string;
+    shopPhone?: string;
+    shopAddress?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    gstNumber?: string;
+    shopType?: 'RETAIL' | 'WHOLESALE' | 'DISTRIBUTOR' | 'SERVICE' | 'MANUFACTURING' | 'ONLINE' | 'OTHER';
+  },
+) {
+  const owner = await prisma.account.findFirst({
+    where: { id: input.ownerAccountId, deletedAt: null },
+  });
+  if (!owner) throw new HttpError(404, 'OWNER_NOT_FOUND', 'Owner account not found');
+
+  const result = await prisma.$transaction(async (tx) => {
+    const shop = await tx.shop.create({
+      data: {
+        name: input.shopName,
+        ownerAccountId: owner.id,
+        phone: input.shopPhone ?? owner.phone,
+        email: input.email ?? owner.email,
+        address: input.shopAddress,
+        city: input.city,
+        state: input.state,
+        pincode: input.pincode,
+        gstNumber: input.gstNumber,
+        shopType: input.shopType ?? 'RETAIL',
+        status: 'ACTIVE',
+      },
+    });
+    await tx.shopMembership.create({
+      data: { shopId: shop.id, accountId: owner.id, role: 'OWNER', status: 'ACTIVE', joinedAt: new Date() },
+    });
+    await tx.warehouse.create({
+      data: { shopId: shop.id, name: 'Main Warehouse', code: 'MAIN', isDefault: true },
+    });
+    return { shop };
+  });
+
+  await writeAudit({
+    ...ctx,
+    action: 'SHOP_CREATED_FOR_OWNER',
+    entityType: 'shop',
+    entityId: result.shop.id,
+    shopId: result.shop.id,
+    newValue: { accountId: owner.id, shopName: result.shop.name },
+    severity: 'HIGH',
+  });
+
+  return {
+    shop: { id: result.shop.id, name: result.shop.name },
+    owner: { id: owner.id, fullName: owner.fullName, email: owner.email, phone: owner.phone },
+  };
+}
+
 /* --------------------------------- users --------------------------------- */
 
 export async function listUsers(ctx: ReqCtx, query: { page: number; limit: number; search?: string; status?: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'BLOCKED' }) {

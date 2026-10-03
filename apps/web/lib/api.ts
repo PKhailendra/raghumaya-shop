@@ -1118,6 +1118,25 @@ export const adminApi = {
   suspendShop: (id: string, reason?: string) => post(`/admin/shops/${id}/suspend`, { reason }),
   activateShop: (id: string) => post(`/admin/shops/${id}/reactivate`),
   deleteShop: (id: string) => del(`/admin/shops/${id}`),
+  // Create a shop for an EXISTING owner account (multi-shop owner).
+  createShopForOwner: (body: {
+    ownerAccountId: string;
+    shopName: string;
+    email?: string;
+    shopPhone?: string;
+    shopAddress?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    gstNumber?: string;
+    shopType?: string;
+  }) => post(`/admin/shops`, body),
+  // Search owner accounts by name/email/phone for the existing-owner picker.
+  searchOwners: (search: string) =>
+    get<ListResponse<{ id: string; fullName: string; email?: string; phone: string }>>("/admin/users", {
+      search: search || undefined,
+      limit: 10,
+    }),
   users: async (params?: PageParams & { status?: string }) => {
     const raw = await get<ListResponse<Record<string, any>>>("/admin/users", params);
     return {

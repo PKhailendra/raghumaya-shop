@@ -1,4 +1,4 @@
-import { useQuery, UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, UseQueryResult } from '@tanstack/react-query';
 import { api } from './client';
 import { FinanceDashboard, ListResponse, Shop, ShopMember, SubscriptionInfo } from './types';
 
@@ -11,13 +11,31 @@ export function useFinanceDashboard(): UseQueryResult<FinanceDashboard> {
   });
 }
 
-export function useMyShops(): UseQueryResult<Shop[]> {
-  return useQuery({
+export function useMyShops(): UseQueryResult<Shop[]> {  return useQuery({
     queryKey: ['shops', 'mine'],
     queryFn: async () => {
       // API wraps the list as { data: [...] } — unwrap to a plain array
       const res = await api<{ data: Shop[] } | Shop[]>('/shops');
       return Array.isArray(res) ? res : (res.data ?? []);
+    },
+  });
+}
+
+export interface CreateShopInput {
+  name: string;
+  shopType?: string;
+  city?: string;
+  state?: string;
+  phone?: string;
+  email?: string;
+}
+
+export function useCreateShop() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateShopInput) => api<Shop>('/shops', { method: 'POST', body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['shops'] });
     },
   });
 }

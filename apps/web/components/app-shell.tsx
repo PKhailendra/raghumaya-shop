@@ -17,7 +17,12 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Menu, X, LogOut, Store, ChevronDown } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Menu, X, LogOut, Store, ChevronDown, Plus } from "lucide-react";
+import { shopsApi, ApiError, SHOP_TYPE_OPTIONS } from "@/lib/api";
 import type { LucideIcon } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -161,6 +166,9 @@ export function ShopSwitcher() {
   const active = memberships.find((m) => m.shopId === activeShopId);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  // Only owners can create additional shops for themselves.
+  const canCreate = memberships.some((m) => m.role === "OWNER");
 
   if (memberships.length === 0) return null;
 
@@ -198,10 +206,80 @@ export function ShopSwitcher() {
               ) : null}
             </DropdownMenuItem>
           ))}
+          {canCreate && (
+            <DropdownMenuItem onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              <span className="text-sm font-medium">Add new shop</span>
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {error && <div className="mt-1 px-1 text-xs text-destructive">{error}</div>}
+      {showCreate && <CreateShopDialog open={showCreate} onOpenChange={setShowCreate} />}
     </div>
+  );
+}
+
+/** Owner self-service: create an additional shop for themselves. */
+function CreateShopDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { switchShop } = useAuth();
+  const [name, setName] = useState("");
+  const [shopType, setShopType] = useState("RETAIL");
+  const [city, setCity] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!name.trim()) return setError("Shop name is required.");
+    setBusy(true);
+    try {
+      const shop = await shopsApi.create({
+        name: name.trim(),
+        shopType: shopType || undefined,
+        city: city.trim() || undefined,
+      });
+      onOpenChange(false);
+      // Switch to the newly created shop.
+      if (shop?.id) await switchShop(shop.id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not create the shop.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add new shop</DialogTitle>
+          <DialogDescription>Create another shop under your account. You can switch between shops anytime.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          {error && <div className="text-sm text-destructive">{error}</div>}
+          <div className="space-y-2">
+            <Label htmlFor="os-name">Shop name *</Label>
+            <Input id="os-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sharma General Store 2" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Shop type</Label>
+              <Select value={shopType} onChange={setShopType} options={[...SHOP_TYPE_OPTIONS]} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="os-city">City <span className="text-muted-foreground">(optional)</span></Label>
+              <Input id="os-city" value={city} onChange={(e) => setCity(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
+            <Button type="submit" disabled={busy}>{busy ? "Creating…" : "Create shop"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

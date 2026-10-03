@@ -26,6 +26,9 @@ export const reactivateShop = asyncHandler(async (req: Request, res: Response) =
 export const createShopOwner = asyncHandler(async (req: Request, res: Response) => {
   res.status(201).json(await service.createShopOwner(ctxFromReq(req), req.body));
 });
+export const createShopForOwner = asyncHandler(async (req: Request, res: Response) => {
+  res.status(201).json(await service.createShopForOwner(ctxFromReq(req), req.body));
+});
 export const listUsers = asyncHandler(async (req: Request, res: Response) => {
   res.json(await service.listUsers(ctxFromReq(req), req.query as unknown as PL & { search?: string; status?: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'BLOCKED' }));
 });

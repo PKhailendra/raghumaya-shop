@@ -25,6 +25,18 @@ const ticketListQ = paginationSchema.extend({
 const subListQ = paginationSchema.extend({ status: z.enum(['ACTIVE', 'TRIAL', 'EXPIRED', 'CANCELLED']).optional() });
 const approvalListQ = paginationSchema.extend({ status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional() });
 const loginHistoryQ = paginationSchema.extend({ accountId: z.string().uuid().optional(), fromDate: z.string().optional(), toDate: z.string().optional() });
+const createShopForOwnerSchema = z.object({
+  ownerAccountId: z.string().uuid(),
+  shopName: z.string().trim().min(2).max(150),
+  email: z.string().trim().email().max(180).optional(),
+  shopPhone: z.string().trim().max(30).optional(),
+  shopAddress: z.string().trim().max(500).optional(),
+  city: z.string().trim().max(100).optional(),
+  state: z.string().trim().max(100).optional(),
+  pincode: z.string().trim().max(20).optional(),
+  gstNumber: z.string().trim().max(20).optional(),
+  shopType: z.enum(SHOP_TYPES).optional(),
+});
 
 r.use(authenticate);
 
@@ -50,6 +62,7 @@ r.get('/referrals', c.listReferralsAdmin);
 
 r.get('/shops', validateRequest({ query: shopListQ }), c.listShops);
 r.post('/shop-owners', requireSuperAdmin, validateRequest({ body: registerShopOwnerSchema }), c.createShopOwner);
+r.post('/shops', requireSuperAdmin, validateRequest({ body: createShopForOwnerSchema }), c.createShopForOwner);
 r.get('/shops/:id', validateRequest({ params: uuidParam }), c.getShop);
 r.patch('/shops/:id', validateRequest({ params: uuidParam, body: z.object({ name: z.string().min(1).optional(), email: z.string().email().optional(), phone: z.string().optional(), address: z.string().optional(), city: z.string().optional(), state: z.string().optional(), pincode: z.string().optional(), gstNumber: z.string().optional(), shopType: z.enum(SHOP_TYPES).optional() }).strict() }), c.updateShop);
 r.post('/shops/:id/suspend', requireSuperAdmin, validateRequest({ params: uuidParam, body: z.object({ reason: z.string().optional() }) }), c.suspendShop);

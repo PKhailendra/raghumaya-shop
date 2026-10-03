@@ -204,6 +204,11 @@ function CreateShopDialog({
   const [state, setState] = useState("");
   const [pincode, setPincode] = useState("");
   const [referralCode, setReferralCode] = useState("");
+  const [mode, setMode] = useState<"new" | "existing">("new");
+  const [ownerQuery, setOwnerQuery] = useState("");
+  const [ownerResults, setOwnerResults] = useState<{ id: string; fullName: string; email?: string; phone: string }[]>([]);
+  const [selectedOwner, setSelectedOwner] = useState<{ id: string; fullName: string; email?: string; phone: string } | null>(null);
+  const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -223,7 +228,30 @@ function CreateShopDialog({
     setState("");
     setPincode("");
     setReferralCode("");
+    setMode("new");
+    setOwnerQuery("");
+    setOwnerResults([]);
+    setSelectedOwner(null);
     setError(null);
+  };
+
+  const searchOwners = async (q: string) => {
+    setOwnerQuery(q);
+    setSelectedOwner(null);
+    if (q.trim().length < 2) {
+      setOwnerResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await adminApi.searchOwners(q.trim());
+      const list = Array.isArray(res) ? res : (res as unknown as { data?: typeof ownerResults })?.data ?? [];
+      setOwnerResults(list);
+    } catch {
+      setOwnerResults([]);
+    } finally {
+      setSearching(false);
+    }
   };
 
   const close = () => {
@@ -238,11 +266,44 @@ function CreateShopDialog({
     setError(null);
     setNotice(null);
     if (!name.trim()) return setError("Shop name is required.");
+    if (gstNumber.trim() && !/^[0-9A-Z]{15}$/i.test(gstNumber.trim()))
+      return setError("GST number must be 15 characters (e.g. 22AAAAA0000A1Z5).");
+
+    if (mode === "existing") {
+      // Create shop for an existing owner — no new account.
+      if (!selectedOwner) return setError("Please search and select the existing owner first.");
+      setBusy(true);
+      try {
+        await adminApi.createShopForOwner({
+          ownerAccountId: selectedOwner.id,
+          shopName: name.trim(),
+          email: email.trim() || undefined,
+          shopPhone: shopPhone.trim() || undefined,
+          shopAddress: shopAddress.trim() || undefined,
+          city: city.trim() || undefined,
+          state: state.trim() || undefined,
+          pincode: pincode.trim() || undefined,
+          gstNumber: gstNumber.trim() || undefined,
+          shopType: shopType || undefined,
+        });
+        reset();
+        setDone(true);
+        onShopCreated();
+        setNotice(
+          `Shop created successfully and linked to ${selectedOwner.fullName}. They can switch to it from their shop switcher.`
+        );
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Could not create the shop.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    // New owner mode — create account + shop together.
     if (!ownerName.trim()) return setError("Owner name is required.");
     if (phone.trim().length < 7) return setError("A valid owner phone number is required.");
     if (password.length < 8) return setError("Password must be at least 8 characters.");
-    if (gstNumber.trim() && !/^[0-9A-Z]{15}$/i.test(gstNumber.trim()))
-      return setError("GST number must be 15 characters (e.g. 22AAAAA0000A1Z5).");
     setBusy(true);
     try {
       const res = await adminApi.createShop({
@@ -284,7 +345,7 @@ function CreateShopDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Add shop</DialogTitle>
-          <DialogDescription>Create a new tenant shop and its owner account. Fields marked * are required.</DialogDescription>
+          <DialogDescription>Create a new tenant shop. Fields marked * are required.</DialogDescription>
         </DialogHeader>
         {done ? (
           <div className="space-y-4 py-2">
@@ -297,6 +358,68 @@ function CreateShopDialog({
         <form onSubmit={submit} className="space-y-5">
           {error && <div className="text-sm text-destructive">{error}</div>}
           {notice && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">{notice}</div>}
+
+          <div className="flex gap-2 p-1 bg-muted rounded-md">
+            <Button
+              type="button"
+              variant={mode === "new" ? "default" : "ghost"}
+              size="sm"
+              className="flex-1"
+              onClick={() => { setMode("new"); setSelectedOwner(null); }}
+            >
+              New owner
+            </Button>
+            <Button
+              type="button"
+              variant={mode === "existing" ? "default" : "ghost"}
+              size="sm"
+              className="flex-1"
+              onClick={() => setMode("existing")}
+            >
+              Existing owner
+            </Button>
+          </div>
+
+          {mode === "existing" && (
+            <div>
+              <div className="text-sm font-semibold mb-3">Select owner *</div>
+              <div className="space-y-2">
+                <Input
+                  value={ownerQuery}
+                  onChange={(e) => searchOwners(e.target.value)}
+                  placeholder="Search by name, email or phone (min 2 chars)"
+                />
+                {searching && <p className="text-xs text-muted-foreground">Searching…</p>}
+                {selectedOwner ? (
+                  <div className="flex items-center justify-between rounded-md border px-3 py-2 bg-green-50 border-green-200">
+                    <div>
+                      <div className="text-sm font-medium">{selectedOwner.fullName}</div>
+                      <div className="text-xs text-muted-foreground">{selectedOwner.email ?? selectedOwner.phone}</div>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => { setSelectedOwner(null); setOwnerQuery(""); setOwnerResults([]); }}>
+                      Change
+                    </Button>
+                  </div>
+                ) : (
+                  ownerResults.length > 0 && (
+                    <div className="rounded-md border divide-y max-h-48 overflow-y-auto">
+                      {ownerResults.map((o) => (
+                        <button
+                          key={o.id}
+                          type="button"
+                          className="w-full text-left px-3 py-2 hover:bg-accent"
+                          onClick={() => { setSelectedOwner(o); setOwnerResults([]); }}
+                        >
+                          <div className="text-sm font-medium">{o.fullName}</div>
+                          <div className="text-xs text-muted-foreground">{o.email ?? o.phone} · {o.phone}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          )}
 
           <div>
             <div className="text-sm font-semibold mb-3">Shop information</div>
@@ -342,6 +465,7 @@ function CreateShopDialog({
             </div>
           </div>
 
+          {mode === "new" ? (
           <div>
             <div className="text-sm font-semibold mb-3">Owner information</div>
             <div className="space-y-4">
@@ -371,6 +495,15 @@ function CreateShopDialog({
               </div>
             </div>
           </div>
+          ) : (
+          <div>
+            <div className="text-sm font-semibold mb-3">Shop contact <span className="text-muted-foreground font-normal">(optional — defaults to owner details)</span></div>
+            <div className="space-y-2">
+              <Label htmlFor="cs-email2">Shop email</Label>
+              <Input id="cs-email2" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Defaults to owner email" />
+            </div>
+          </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={close} disabled={busy}>
