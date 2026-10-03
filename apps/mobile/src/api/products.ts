@@ -49,20 +49,32 @@ export function useCategories(): UseQueryResult<ListResponse<Category>> {
   });
 }
 
+export function useBrands(): UseQueryResult<ListResponse<{ id: string; name: string }>> {
+  return useQuery({
+    queryKey: ['brands'],
+    queryFn: () => api<ListResponse<{ id: string; name: string }>>('/inventory/brands'),
+  });
+}
+
 export interface ProductInput {
   name: string;
   sku?: string;
   barcode?: string;
   qrCode?: string;
   categoryId?: string;
+  brandId?: string;
   description?: string;
   unit?: string;
   purchasePrice?: string;
   sellingPrice: string;
   mrp?: string;
   gstRate?: string;
+  taxRate?: string;
+  hsnCode?: string;
   currentStock?: string;
   minStockLevel?: string;
+  reorderLevel?: string;
+  isActive?: boolean;
 }
 
 export function useCreateProduct() {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Alert,
+  Modal,
   ScrollView,
   Text,
   TextInput,
@@ -14,6 +15,8 @@ import {
   useProduct,
   useCreateProduct,
   useUpdateProduct,
+  useCategories,
+  useBrands,
   ProductInput,
 } from '../../src/api/products';
 import { normalizeBarcode } from '../../src/api/barcodeLookup';
@@ -47,17 +50,26 @@ export default function ProductFormScreen() {
   const { data: existing, isLoading } = useProduct(id ?? '');
   const create = useCreateProduct();
   const update = useUpdateProduct();
+  const { data: categoriesData } = useCategories();
+  const { data: brandsData } = useBrands();
 
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
   const [barcode, setBarcode] = useState('');
+  const [qrCode, setQrCode] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [brandId, setBrandId] = useState('');
   const [description, setDescription] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
   const [mrp, setMrp] = useState('');
+  const [taxRate, setTaxRate] = useState('0');
+  const [hsnCode, setHsnCode] = useState('');
   const [currentStock, setCurrentStock] = useState('');
   const [minStockLevel, setMinStockLevel] = useState('');
   const [unit, setUnit] = useState('pcs');
+  const [isActive, setIsActive] = useState(true);
+  const [pickerFor, setPickerFor] = useState<'category' | 'brand' | null>(null);
   const [initialized, setInitialized] = useState(false);
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -65,6 +77,7 @@ export default function ProductFormScreen() {
   const [torchOn, setTorchOn] = useState(false);
 
   // Prefill from scan (new product flow) — auto-generate unique SKU from name + barcode
+  // Lookup data (name/brand/category/description) arrives in English and is used as-is.
   useEffect(() => {
     if (!isEdit && !initialized) {
       if (barcodeParam) setBarcode(barcodeParam);
@@ -81,11 +94,32 @@ export default function ProductFormScreen() {
         const autoSku = [namePart, barcodeSuffix].filter(Boolean).join('-');
         if (autoSku) setSku(autoSku);
       }
-      // Enrichment extras: brand/category/model/pack-size folded into description
-      // so nothing from the lookup is lost (backend product has description).
+      // Try to match lookup brand/category names to existing records (case-insensitive).
+      // Unmatched names stay visible in description so nothing from the lookup is lost.
+      const unmatched: string[] = [];
+      if (brandParam && brandsData) {
+        const list = Array.isArray(brandsData) ? brandsData : (brandsData as { data?: unknown[] }).data ?? [];
+        const match = (list as { id: string; name: string }[]).find(
+          (b) => b.name.toLowerCase() === brandParam.toLowerCase(),
+        );
+        if (match) setBrandId(match.id);
+        else unmatched.push(`Brand: ${brandParam}`);
+      } else if (brandParam) {
+        unmatched.push(`Brand: ${brandParam}`);
+      }
+      if (categoryParam && categoriesData) {
+        const list = Array.isArray(categoriesData) ? categoriesData : (categoriesData as { data?: unknown[] }).data ?? [];
+        const match = (list as { id: string; name: string }[]).find(
+          (c) => c.name.toLowerCase() === categoryParam.toLowerCase(),
+        );
+        if (match) setCategoryId(match.id);
+        else unmatched.push(`Category: ${categoryParam}`);
+      } else if (categoryParam) {
+        unmatched.push(`Category: ${categoryParam}`);
+      }
+      // Remaining enrichment extras folded into description so nothing is lost.
       const extras = [
-        brandParam ? `Brand: ${brandParam}` : '',
-        categoryParam ? `Category: ${categoryParam}` : '',
+        ...unmatched,
         modelParam ? `Model: ${modelParam}` : '',
         packSizeParam ? `Pack: ${packSizeParam}` : '',
         descriptionParam ?? '',
@@ -93,19 +127,25 @@ export default function ProductFormScreen() {
       if (extras) setDescription(extras);
       if (barcodeParam || nameParam) setInitialized(true);
     }
-  }, [isEdit, barcodeParam, nameParam, brandParam, categoryParam, descriptionParam, packSizeParam, modelParam, initialized]);
+  }, [isEdit, barcodeParam, nameParam, brandParam, categoryParam, descriptionParam, packSizeParam, modelParam, brandsData, categoriesData, initialized]);
   useEffect(() => {
     if (isEdit && existing && !initialized) {
       setName(existing.name ?? '');
       setSku(existing.sku ?? '');
       setBarcode(existing.barcode ?? '');
+      setQrCode((existing as { qrCode?: string }).qrCode ?? '');
+      setCategoryId((existing as { categoryId?: string }).categoryId ?? '');
+      setBrandId((existing as { brandId?: string }).brandId ?? '');
       setDescription((existing as { description?: string }).description ?? '');
       setSellingPrice(existing.sellingPrice ?? '');
       setPurchasePrice(existing.purchasePrice ?? '');
       setMrp(existing.mrp ?? '');
+      setTaxRate((existing as { taxRate?: string }).taxRate ?? (existing as { gstRate?: string }).gstRate ?? '0');
+      setHsnCode((existing as { hsnCode?: string }).hsnCode ?? '');
       setCurrentStock(existing.currentStock ?? '');
       setMinStockLevel(existing.minStockLevel ?? '');
       setUnit(existing.unit ?? 'pcs');
+      setIsActive((existing as { isActive?: boolean }).isActive ?? true);
       setInitialized(true);
     }
   }, [isEdit, existing, initialized]);
@@ -142,12 +182,18 @@ export default function ProductFormScreen() {
       sellingPrice: price.toFixed(2),
       ...(sku.trim() ? { sku: sku.trim() } : {}),
       ...(barcode.trim() ? { barcode: barcode.trim() } : {}),
+      ...(qrCode.trim() ? { qrCode: qrCode.trim() } : {}),
+      ...(categoryId ? { categoryId } : {}),
+      ...(brandId ? { brandId } : {}),
       ...(description.trim() ? { description: description.trim() } : {}),
       ...(purchasePrice.trim() ? { purchasePrice: parseFloat(purchasePrice).toFixed(2) } : {}),
       ...(mrp.trim() ? { mrp: parseFloat(mrp).toFixed(2) } : {}),
+      ...(taxRate.trim() ? { taxRate: taxRate.trim(), gstRate: taxRate.trim() } : {}),
+      ...(hsnCode.trim() ? { hsnCode: hsnCode.trim() } : {}),
       ...(currentStock.trim() ? { currentStock: currentStock.trim() } : {}),
-      ...(minStockLevel.trim() ? { minStockLevel: minStockLevel.trim() } : {}),
+      ...(minStockLevel.trim() ? { minStockLevel: minStockLevel.trim(), reorderLevel: minStockLevel.trim() } : {}),
       ...(unit.trim() ? { unit: unit.trim() } : {}),
+      isActive,
     };
     const onSuccess = () => {
       Alert.alert('Saved', `Product ${isEdit ? 'updated' : 'created'} successfully.`);
@@ -166,6 +212,19 @@ export default function ProductFormScreen() {
   if (isEdit && isLoading) return <LoadingSpinner />;
 
   const pending = create.isPending || update.isPending;
+
+  const categoryList = (() => {
+    const d = categoriesData as unknown;
+    const arr = Array.isArray(d) ? d : (d as { data?: unknown[] })?.data ?? [];
+    return (arr as { id: string; name: string }[]);
+  })();
+  const brandList = (() => {
+    const d = brandsData as unknown;
+    const arr = Array.isArray(d) ? d : (d as { data?: unknown[] })?.data ?? [];
+    return (arr as { id: string; name: string }[]);
+  })();
+  const categoryName = (id: string) => categoryList.find((c) => c.id === id)?.name ?? '';
+  const brandName = (id: string) => brandList.find((b) => b.id === id)?.name ?? '';
 
   if (scanning) {
     return (
@@ -217,7 +276,24 @@ export default function ProductFormScreen() {
       <Text style={styles.label}>SKU</Text>
       <TextInput style={styles.input} value={sku} onChangeText={setSku} placeholder="Optional" placeholderTextColor={theme.colors.muted} />
 
-      <Text style={styles.label}>Description</Text>
+      <Text style={styles.label}>QR Code (optional)</Text>
+      <TextInput style={styles.input} value={qrCode} onChangeText={setQrCode} placeholder="QR code value" placeholderTextColor={theme.colors.muted} />
+
+      <Text style={styles.label}>Category (optional)</Text>
+      <TouchableOpacity style={styles.input} onPress={() => setPickerFor('category')}>
+        <Text style={categoryId ? styles.pickerValue : styles.pickerPlaceholder}>
+          {categoryName(categoryId) || 'Select category'}
+        </Text>
+      </TouchableOpacity>
+
+      <Text style={styles.label}>Brand (optional)</Text>
+      <TouchableOpacity style={styles.input} onPress={() => setPickerFor('brand')}>
+        <Text style={brandId ? styles.pickerValue : styles.pickerPlaceholder}>
+          {brandName(brandId) || 'Select brand'}
+        </Text>
+      </TouchableOpacity>
+
+      <Text style={styles.label}>Description (optional)</Text>
       <TextInput
         style={[styles.input, styles.multiline]}
         value={description}
@@ -250,6 +326,17 @@ export default function ProductFormScreen() {
         </View>
       </View>
 
+      <View style={styles.row}>
+        <View style={styles.half}>
+          <Text style={styles.label}>Tax rate % (optional)</Text>
+          <TextInput style={styles.input} value={taxRate} onChangeText={setTaxRate} placeholder="0" placeholderTextColor={theme.colors.muted} keyboardType="decimal-pad" />
+        </View>
+        <View style={styles.half}>
+          <Text style={styles.label}>HSN code (optional)</Text>
+          <TextInput style={styles.input} value={hsnCode} onChangeText={setHsnCode} placeholder="e.g. 0902" placeholderTextColor={theme.colors.muted} />
+        </View>
+      </View>
+
       {!isEdit && (
         <View style={styles.row}>
           <View style={styles.half}>
@@ -263,9 +350,44 @@ export default function ProductFormScreen() {
         </View>
       )}
 
+      <TouchableOpacity style={styles.toggleRow} onPress={() => setIsActive((v) => !v)}>
+        <Text style={styles.toggleLabel}>Active product</Text>
+        <Text style={styles.toggleValue}>{isActive ? '✅ Yes' : '❌ No'}</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={[styles.saveBtn, pending && styles.saveBtnDisabled]} onPress={submit} disabled={pending}>
         <Text style={styles.saveBtnText}>{pending ? 'Saving…' : isEdit ? 'Save changes' : 'Add product'}</Text>
       </TouchableOpacity>
+
+      {pickerFor && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setPickerFor(null)}>
+          <View style={styles.pickerOverlay}>
+            <View style={styles.pickerBox}>
+              <Text style={styles.pickerTitle}>{pickerFor === 'category' ? 'Select category' : 'Select brand'}</Text>
+              <ScrollView style={styles.pickerList}>
+                <TouchableOpacity
+                  style={styles.pickerItem}
+                  onPress={() => { if (pickerFor === 'category') setCategoryId(''); else setBrandId(''); setPickerFor(null); }}
+                >
+                  <Text style={styles.pickerItemText}>— None —</Text>
+                </TouchableOpacity>
+                {(pickerFor === 'category' ? categoryList : brandList).map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.pickerItem}
+                    onPress={() => { if (pickerFor === 'category') setCategoryId(item.id); else setBrandId(item.id); setPickerFor(null); }}
+                  >
+                    <Text style={styles.pickerItemText}>{item.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <TouchableOpacity style={styles.pickerCancel} onPress={() => setPickerFor(null)}>
+                <Text style={styles.pickerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </ScrollView>
   );
 }
@@ -286,6 +408,19 @@ const styles = StyleSheet.create({
   saveBtn: { marginTop: 24, backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, paddingVertical: 14, alignItems: 'center' },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, padding: 12 },
+  toggleLabel: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
+  toggleValue: { fontSize: 15, color: theme.colors.subtext },
+  pickerValue: { fontSize: 15, color: theme.colors.text },
+  pickerPlaceholder: { fontSize: 15, color: theme.colors.muted },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  pickerBox: { backgroundColor: theme.colors.card, borderRadius: theme.radius.sm, width: '100%', maxHeight: '70%', padding: 16 },
+  pickerTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text, marginBottom: 12 },
+  pickerList: { maxHeight: 300 },
+  pickerItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  pickerItemText: { fontSize: 15, color: theme.colors.text },
+  pickerCancel: { marginTop: 12, alignItems: 'center', paddingVertical: 10 },
+  pickerCancelText: { fontSize: 15, fontWeight: '700', color: theme.colors.primary },
   scannerWrap: { flex: 1, backgroundColor: '#000' },
   scannerOverlay: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 120 },
   scannerText: { color: '#fff', fontSize: 16, fontWeight: '600', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },

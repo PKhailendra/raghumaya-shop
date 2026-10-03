@@ -327,7 +327,11 @@ export type Product = {
   sellingPrice: string;
   mrp?: string;
   gstRate?: string;
+  taxRate?: string;
+  hsnCode?: string;
   currentStock: number;
+  reorderLevel?: number;
+  isActive?: boolean;
   unit?: string;
   variants?: ProductVariant[];
   batches?: ProductBatch[];

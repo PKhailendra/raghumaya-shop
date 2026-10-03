@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -41,6 +42,10 @@ export default function ShopInventoryPage() {
     queryKey: ["shop", "categories"],
     queryFn: () => inventoryApi.categories(),
   });
+  const brands = useQuery({
+    queryKey: ["shop", "brands"],
+    queryFn: () => inventoryApi.brands(),
+  });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["shop", "products"] });
 
@@ -66,6 +71,7 @@ export default function ShopInventoryPage() {
   };
 
   const categoryOptions = toOptions(categories.data, "category");
+  const brandOptions = toOptions(brands.data, "brand");
   const rows = products.data?.data ?? [];
   const total = products.data?.meta.total ?? 0;
 
@@ -220,6 +226,7 @@ export default function ShopInventoryPage() {
         <ProductEditor
           product={editor.product}
           categories={categoryOptions}
+          brands={brandOptions}
           onClose={() => setEditor(null)}
           onSaved={() => { setEditor(null); invalidate(); }}
         />
@@ -247,24 +254,32 @@ function toOptions(data: unknown, _kind: string): { value: string; label: string
 function ProductEditor({
   product,
   categories,
+  brands,
   onClose,
   onSaved,
 }: {
   product?: Product;
   categories: { value: string; label: string }[];
+  brands: { value: string; label: string }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [name, setName] = useState(product?.name ?? "");
   const [sku, setSku] = useState(product?.sku ?? "");
   const [barcode, setBarcode] = useState(product?.barcode ?? "");
+  const [qrCode, setQrCode] = useState(product?.qrCode ?? "");
+  const [description, setDescription] = useState(product?.description ?? "");
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? "");
+  const [brandId, setBrandId] = useState(product?.brandId ?? "");
   const [sellingPrice, setSellingPrice] = useState(product?.sellingPrice ?? "");
   const [purchasePrice, setPurchasePrice] = useState(product?.purchasePrice ?? "");
   const [mrp, setMrp] = useState(product?.mrp ?? "");
-  const [gstRate, setGstRate] = useState(product?.gstRate ?? "0");
+  const [gstRate, setGstRate] = useState(product?.gstRate ?? product?.taxRate ?? "0");
+  const [hsnCode, setHsnCode] = useState(product?.hsnCode ?? "");
   const [unit, setUnit] = useState(product?.unit ?? "pcs");
   const [stock, setStock] = useState(product ? String(product.currentStock) : "0");
+  const [reorderLevel, setReorderLevel] = useState(product?.reorderLevel != null ? String(product.reorderLevel) : "0");
+  const [isActive, setIsActive] = useState(product?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -276,19 +291,28 @@ function ProductEditor({
     if (!sellingPrice || Number(sellingPrice) <= 0) return setError("Selling price must be greater than 0.");
     const stockNum = Number(stock);
     if (!Number.isFinite(stockNum) || stockNum < 0) return setError("Stock must be a non-negative number.");
+    const reorderNum = Number(reorderLevel);
+    if (!Number.isFinite(reorderNum) || reorderNum < 0) return setError("Reorder level must be a non-negative number.");
     setBusy(true);
     try {
       const body = {
         name: name.trim(),
         sku: sku.trim(),
         barcode: barcode.trim() || undefined,
+        qrCode: qrCode.trim() || undefined,
+        description: description.trim() || undefined,
         categoryId: categoryId || undefined,
+        brandId: brandId || undefined,
         sellingPrice,
         purchasePrice: purchasePrice || undefined,
         mrp: mrp || undefined,
         gstRate,
+        taxRate: gstRate,
+        hsnCode: hsnCode.trim() || undefined,
         unit,
         currentStock: stockNum,
+        reorderLevel: reorderNum,
+        isActive,
       };
       if (product) await inventoryApi.updateProduct(product.id, body);
       else await inventoryApi.createProduct(body);
@@ -302,7 +326,7 @@ function ProductEditor({
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{product ? "Edit product" : "Add product"}</DialogTitle>
         </DialogHeader>
@@ -318,12 +342,24 @@ function ProductEditor({
               <Input id="p-sku" value={sku} onChange={(e) => setSku(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="p-barcode">Barcode</Label>
-              <Input id="p-barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} />
+              <Label htmlFor="p-barcode">Barcode <span className="text-muted-foreground">(optional)</span></Label>
+              <Input id="p-barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="Scan or type barcode" />
             </div>
             <div className="space-y-2">
-              <Label>Category</Label>
+              <Label htmlFor="p-qrcode">QR Code <span className="text-muted-foreground">(optional)</span></Label>
+              <Input id="p-qrcode" value={qrCode} onChange={(e) => setQrCode(e.target.value)} placeholder="QR code value" />
+            </div>
+            <div className="space-y-2">
+              <Label>Category <span className="text-muted-foreground">(optional)</span></Label>
               <Select value={categoryId} onChange={setCategoryId} placeholder="No category" options={[{ value: "", label: "No category" }, ...categories]} />
+            </div>
+            <div className="space-y-2">
+              <Label>Brand <span className="text-muted-foreground">(optional)</span></Label>
+              <Select value={brandId} onChange={setBrandId} placeholder="No brand" options={[{ value: "", label: "No brand" }, ...brands]} />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="p-desc">Description <span className="text-muted-foreground">(optional)</span></Label>
+              <Textarea id="p-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Product details, pack size, etc." rows={2} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="p-sell">Selling price *</Label>
@@ -342,12 +378,26 @@ function ProductEditor({
               <Select value={gstRate} onChange={setGstRate} options={["0", "5", "12", "18", "28"].map((g) => ({ value: g, label: `${g}%` }))} />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="p-hsn">HSN Code <span className="text-muted-foreground">(optional)</span></Label>
+              <Input id="p-hsn" value={hsnCode} onChange={(e) => setHsnCode(e.target.value)} placeholder="e.g. 0902" />
+            </div>
+            <div className="space-y-2">
               <Label>Unit</Label>
               <Select value={unit} onChange={setUnit} options={["pcs", "kg", "g", "ltr", "ml", "box", "pack"].map((u) => ({ value: u, label: toTitle(u) }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="p-stock">{product ? "Current stock" : "Opening stock"}</Label>
               <Input id="p-stock" type="number" min="0" step="1" value={stock} onChange={(e) => setStock(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="p-reorder">Reorder level <span className="text-muted-foreground">(optional)</span></Label>
+              <Input id="p-reorder" type="number" min="0" step="1" value={reorderLevel} onChange={(e) => setReorderLevel(e.target.value)} placeholder="Alert below this stock" />
+            </div>
+            <div className="space-y-2 flex items-end pb-2">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-4 w-4 rounded" />
+                Active product
+              </label>
             </div>
           </div>
           <DialogFooter>
