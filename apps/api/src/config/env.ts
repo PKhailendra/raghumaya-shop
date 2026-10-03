@@ -29,6 +29,10 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().optional(),
+  // Resend HTTP API (preferred on hosts that block outbound SMTP, e.g. Railway).
+  // Get a free key at https://resend.com — no credit card needed.
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

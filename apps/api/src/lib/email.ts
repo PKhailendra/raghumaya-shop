@@ -2,13 +2,40 @@ import nodemailer from 'nodemailer';
 import { env } from '../config/env';
 
 /**
- * Outgoing email via SMTP (welcome credentials, etc.).
- * All SMTP settings are optional — when not configured, sending is skipped
+ * Outgoing email via Resend HTTP API (preferred) or SMTP (fallback).
+ * All settings are optional — when nothing is configured, sending is skipped
  * gracefully (returns false) instead of failing the calling operation.
+ *
+ * Resend is preferred on hosts that block outbound SMTP (e.g. Railway free
+ * tier blocks ports 25/587/465). Get a free API key at https://resend.com
+ * (100 emails/day, no credit card). Set RESEND_API_KEY and RESEND_FROM.
  */
 
 export function isEmailConfigured(): boolean {
-  return Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
+  return Boolean(env.RESEND_API_KEY || (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS));
+}
+
+/** Send via Resend's HTTPS API — no SMTP ports needed. */
+async function sendViaResend(opts: { to: string; subject: string; html: string; text?: string }): Promise<boolean> {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: env.RESEND_FROM ?? env.SMTP_FROM ?? env.SMTP_USER ?? 'onboarding@resend.dev',
+      to: [opts.to],
+      subject: opts.subject,
+      html: opts.html,
+      ...(opts.text ? { text: opts.text } : {}),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Resend API ${res.status}: ${body.slice(0, 200)}`);
+  }
+  return true;
 }
 
 function transporter() {
@@ -27,7 +54,16 @@ function transporter() {
 export async function sendEmail(opts: { to: string; subject: string; html: string; text?: string }): Promise<boolean> {
   if (!isEmailConfigured()) return false;
   try {
-    // Extra safety: never let email sending block the caller more than 25s.
+    // Prefer Resend HTTP API (works where SMTP ports are blocked).
+    if (env.RESEND_API_KEY) {
+      const send = sendViaResend(opts);
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Resend API timed out')), 25000),
+      );
+      await Promise.race([send, timeout]);
+      return true;
+    }
+    // SMTP fallback.
     const send = transporter().sendMail({
       from: env.SMTP_FROM ?? env.SMTP_USER,
       to: opts.to,
