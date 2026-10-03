@@ -69,10 +69,7 @@ export default function AdminShopsPage() {
       <CreateShopDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreated={() => {
-          setCreateOpen(false);
-          invalidate();
-        }}
+        onShopCreated={invalidate}
       />
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
@@ -188,11 +185,11 @@ export default function AdminShopsPage() {
 function CreateShopDialog({
   open,
   onOpenChange,
-  onCreated,
+  onShopCreated,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onCreated: () => void;
+  onShopCreated: () => void;
 }) {
   const [name, setName] = useState("");
   const [ownerName, setOwnerName] = useState("");
@@ -201,12 +198,45 @@ function CreateShopDialog({
   const [password, setPassword] = useState("");
   const [shopType, setShopType] = useState("RETAIL");
   const [gstNumber, setGstNumber] = useState("");
+  const [shopPhone, setShopPhone] = useState("");
+  const [shopAddress, setShopAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [pincode, setPincode] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const reset = () => {
+    setName("");
+    setOwnerName("");
+    setEmail("");
+    setPhone("");
+    setPassword("");
+    setShopType("RETAIL");
+    setGstNumber("");
+    setShopPhone("");
+    setShopAddress("");
+    setCity("");
+    setState("");
+    setPincode("");
+    setReferralCode("");
+    setError(null);
+  };
+
+  const close = () => {
+    reset();
+    setNotice(null);
+    setDone(false);
+    onOpenChange(false);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     if (!name.trim()) return setError("Shop name is required.");
     if (!ownerName.trim()) return setError("Owner name is required.");
     if (phone.trim().length < 7) return setError("A valid owner phone number is required.");
@@ -215,7 +245,7 @@ function CreateShopDialog({
       return setError("GST number must be 15 characters (e.g. 22AAAAA0000A1Z5).");
     setBusy(true);
     try {
-      await adminApi.createShop({
+      const res = await adminApi.createShop({
         name: name.trim(),
         ownerName: ownerName.trim(),
         email: email.trim() || undefined,
@@ -223,15 +253,25 @@ function CreateShopDialog({
         password,
         shopType,
         gstNumber: gstNumber.trim() || undefined,
+        shopPhone: shopPhone.trim() || undefined,
+        shopAddress: shopAddress.trim() || undefined,
+        city: city.trim() || undefined,
+        state: state.trim() || undefined,
+        pincode: pincode.trim() || undefined,
+        referralCode: referralCode.trim() || undefined,
       });
-      setName("");
-      setOwnerName("");
-      setEmail("");
-      setPhone("");
-      setPassword("");
-      setShopType("RETAIL");
-      setGstNumber("");
-      onCreated();
+      const emailed = (res as { credentialsEmailed?: boolean })?.credentialsEmailed;
+      const ownerEmail = email.trim();
+      reset();
+      setDone(true);
+      onShopCreated();
+      setNotice(
+        emailed
+          ? `Shop created successfully. Login credentials have been emailed to ${ownerEmail}.`
+          : ownerEmail
+            ? "Shop created successfully, but the credentials email could not be sent (email sending is not configured on the server)."
+            : "Shop created successfully. No owner email was given, so no credentials email was sent — share the login ID and password with the owner manually."
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create the shop.");
     } finally {
@@ -240,52 +280,100 @@ function CreateShopDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) close(); }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Add shop</DialogTitle>
-          <DialogDescription>Create a new tenant shop and its owner account.</DialogDescription>
+          <DialogDescription>Create a new tenant shop and its owner account. Fields marked * are required.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={submit} className="space-y-4">
+        {done ? (
+          <div className="space-y-4 py-2">
+            {notice && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">{notice}</div>}
+            <DialogFooter>
+              <Button onClick={close}>Done</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+        <form onSubmit={submit} className="space-y-5">
           {error && <div className="text-sm text-destructive">{error}</div>}
-          <div className="space-y-2">
-            <Label htmlFor="cs-name">Shop name *</Label>
-            <Input id="cs-name" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="cs-owner">Owner name *</Label>
-            <Input id="cs-owner" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="cs-email">Owner email</Label>
-              <Input id="cs-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          {notice && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">{notice}</div>}
+
+          <div>
+            <div className="text-sm font-semibold mb-3">Shop information</div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cs-name">Shop name *</Label>
+                  <Input id="cs-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sharma General Store" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Shop type *</Label>
+                  <Select value={shopType} onChange={setShopType} options={[...SHOP_TYPE_OPTIONS]} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cs-shopphone">Shop phone <span className="text-muted-foreground">(optional)</span></Label>
+                  <Input id="cs-shopphone" value={shopPhone} onChange={(e) => setShopPhone(e.target.value)} placeholder="Defaults to owner phone" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cs-gst">GST number <span className="text-muted-foreground">(optional)</span></Label>
+                  <Input id="cs-gst" value={gstNumber} onChange={(e) => setGstNumber(e.target.value.toUpperCase())} placeholder="15-character GSTIN" maxLength={15} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cs-address">Shop address <span className="text-muted-foreground">(optional)</span></Label>
+                <Input id="cs-address" value={shopAddress} onChange={(e) => setShopAddress(e.target.value)} placeholder="Street, area, landmark" />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cs-city">City <span className="text-muted-foreground">(optional)</span></Label>
+                  <Input id="cs-city" value={city} onChange={(e) => setCity(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cs-state">State <span className="text-muted-foreground">(optional)</span></Label>
+                  <Input id="cs-state" value={state} onChange={(e) => setState(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cs-pincode">Pincode <span className="text-muted-foreground">(optional)</span></Label>
+                  <Input id="cs-pincode" value={pincode} onChange={(e) => setPincode(e.target.value)} maxLength={10} />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="cs-phone">Owner phone *</Label>
-              <Input id="cs-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </div>
+
+          <div>
+            <div className="text-sm font-semibold mb-3">Owner information</div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="cs-owner">Owner name *</Label>
+                <Input id="cs-owner" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="Full name of the shop owner" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cs-email">Owner email</Label>
+                  <Input id="cs-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Login credentials will be emailed here" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cs-phone">Owner phone *</Label>
+                  <Input id="cs-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Also works as login ID" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cs-password">Owner password *</Label>
+                  <Input id="cs-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 8 characters" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cs-referral">Referral code <span className="text-muted-foreground">(optional)</span></Label>
+                  <Input id="cs-referral" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} placeholder="If referred by someone" />
+                </div>
+              </div>
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="cs-password">Owner password *</Label>
-            <Input id="cs-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 8 characters" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="cs-shoptype">Shop type *</Label>
-              <Select
-                value={shopType}
-                onChange={setShopType}
-                options={[...SHOP_TYPE_OPTIONS]}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cs-gst">GST number (optional)</Label>
-              <Input id="cs-gst" value={gstNumber} onChange={(e) => setGstNumber(e.target.value.toUpperCase())} placeholder="15-character GSTIN" maxLength={15} />
-            </div>
-          </div>
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+            <Button type="button" variant="outline" onClick={close} disabled={busy}>
               Cancel
             </Button>
             <Button type="submit" disabled={busy}>
@@ -293,6 +381,7 @@ function CreateShopDialog({
             </Button>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   );

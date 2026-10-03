@@ -1076,8 +1076,24 @@ export const adminApi = {
   shops: (params?: PageParams & { status?: string }) => get<ListResponse<Shop>>("/admin/shops", params),
   getShop: (id: string) => get<Shop & Record<string, unknown>>(`/admin/shops/${id}`),
   // Backend creates a shop owner + shop + membership in one call.
-  createShop: (body: { name: string; ownerName: string; email?: string; phone: string; password: string; shopType?: string; gstNumber?: string; [k: string]: unknown }) =>
-    post("/admin/shop-owners", {
+  // Returns credentialsEmailed=true when the welcome email was sent.
+  createShop: (body: {
+    name: string;
+    ownerName: string;
+    email?: string;
+    phone: string;
+    password: string;
+    shopType?: string;
+    gstNumber?: string;
+    shopPhone?: string;
+    shopAddress?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    referralCode?: string;
+    [k: string]: unknown;
+  }) =>
+    post<{ credentialsEmailed?: boolean }>("/admin/shop-owners", {
       shopName: body.name,
       fullName: body.ownerName,
       email: body.email || undefined,
@@ -1085,6 +1101,12 @@ export const adminApi = {
       password: body.password,
       shopType: body.shopType || undefined,
       gstNumber: body.gstNumber || undefined,
+      shopPhone: body.shopPhone || undefined,
+      shopAddress: body.shopAddress || undefined,
+      city: body.city || undefined,
+      state: body.state || undefined,
+      pincode: body.pincode || undefined,
+      referralCode: body.referralCode || undefined,
     }),
   updateShop: (id: string, body: Record<string, unknown>) => patch<Shop>(`/admin/shops/${id}`, body),
   suspendShop: (id: string, reason?: string) => post(`/admin/shops/${id}/suspend`, { reason }),

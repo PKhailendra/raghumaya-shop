@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { hashPassword } from '../../lib/crypto';
 import { writeAudit } from '../../lib/audit';
+import { sendShopWelcomeEmail } from '../../lib/email';
 import { getPagination, pageMeta, parseDate } from '../../lib/utils';
 import { HttpError } from '../../middleware/errorHandler';
 import type { PlanCode } from '@raghumaya/shared';
@@ -339,12 +340,28 @@ export async function createShopOwner(
     newValue: { accountId: result.account.id, shopName: result.shop.name },
     severity: 'HIGH',
   });
+
+  // Email the login credentials to the owner so they can sign in anytime and
+  // change their password later. Never fails shop creation if email is off.
+  let credentialsEmailed = false;
+  if (result.account.email) {
+    credentialsEmailed = await sendShopWelcomeEmail({
+      to: result.account.email,
+      ownerName: result.account.fullName,
+      shopName: result.shop.name,
+      loginId: result.account.email,
+      phone: result.account.phone,
+      password: input.password,
+    });
+  }
+
   return {
     id: result.account.id,
     fullName: result.account.fullName,
     email: result.account.email,
     phone: result.account.phone,
     shop: { id: result.shop.id, name: result.shop.name },
+    credentialsEmailed,
   };
 }
 
