@@ -17,19 +17,28 @@ function transporter() {
     port: env.SMTP_PORT,
     secure: env.SMTP_SECURE,
     auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+    // Fail fast instead of hanging the API request if SMTP is unreachable.
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   });
 }
 
 export async function sendEmail(opts: { to: string; subject: string; html: string; text?: string }): Promise<boolean> {
   if (!isEmailConfigured()) return false;
   try {
-    await transporter().sendMail({
+    // Extra safety: never let email sending block the caller more than 25s.
+    const send = transporter().sendMail({
       from: env.SMTP_FROM ?? env.SMTP_USER,
       to: opts.to,
       subject: opts.subject,
       html: opts.html,
       text: opts.text,
     });
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('SMTP send timed out')), 25000),
+    );
+    await Promise.race([send, timeout]);
     return true;
   } catch (err) {
     // Never crash the caller because email failed — log and report.
