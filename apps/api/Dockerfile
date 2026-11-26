@@ -13,6 +13,12 @@
 
 # ---------- build stage ----------
 FROM node:20-alpine AS build
+# Prisma needs the openssl CLI to detect which libssl the image has.
+# Without it, Prisma defaults to the openssl-1.1.x engine, which Alpine
+# cannot load — and `migrate deploy` then dies with "Could not parse
+# schema engine response" (see also the runtime stage below). Install it
+# BEFORE `prisma generate` so generate downloads the 3.0.x engines.
+RUN apk add --no-cache openssl
 WORKDIR /app
 
 # install workspace deps (api + shared) — package files first for layer cache
@@ -37,6 +43,12 @@ RUN npm run build --workspace=raghumaya-api
 
 # ---------- runtime stage ----------
 FROM node:20-alpine AS runtime
+# Same openssl requirement as the build stage: `migrate deploy` (run by
+# the entrypoint at container start) executes Prisma's schema engine, and
+# the API's PrismaClient executes the query engine — both fail to load on
+# Alpine without libssl. `apk add openssl` provides OpenSSL 3.x, which
+# matches the 3.0.x engines `prisma generate` downloaded in the build.
+RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NODE_ENV=production
 
