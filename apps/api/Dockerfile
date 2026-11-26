@@ -40,13 +40,14 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Whole workspace dirs, not hand-picked files: apps/api/node_modules holds
+# nested copies npm created for version conflicts, and node needs them
+# exactly as the build stage left them (same lesson as the web Dockerfile).
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages/shared ./packages/shared
-COPY --from=build /app/apps/api/dist ./apps/api/dist
-COPY --from=build /app/apps/api/package.json ./apps/api/package.json
-COPY --from=build /app/apps/api/prisma ./apps/api/prisma
+COPY --from=build /app/apps/api ./apps/api
 
-RUN mkdir -p /app/storage/invoices
+RUN mkdir -p /app/storage/invoices && chmod +x /app/apps/api/docker-entrypoint.sh
 EXPOSE 4000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=5 \
   CMD node -e "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

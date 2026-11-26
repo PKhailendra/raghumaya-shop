@@ -1,0 +1,4 @@
+# Shell scripts must keep LF line endings on every checkout — a CRLF
+# script fails inside the Alpine container with a cryptic "not found".
+# This matters most on Windows checkouts (core.autocrlf).
+*.sh text eol=lf

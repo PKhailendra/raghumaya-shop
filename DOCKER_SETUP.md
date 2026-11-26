@@ -231,9 +231,12 @@ docker compose down -v
 | `prisma migrate deploy` fails with "database does not exist" | Postgres wasn't healthy yet, or `POSTGRES_DB` in `.env` differs from the database in `DATABASE_URL`. `docker compose logs -f postgres`, then `docker compose restart api`. |
 | Hot reload doesn't pick up a change (dev mode) | Save the file, wait a few seconds (polling). If still stale, `docker compose -f docker-compose.yml -f docker-compose.dev.yml restart web` (or `api`). |
 | `docker` command not found in PowerShell | Docker Desktop isn't installed or isn't running. Install it (§2) and wait for **Engine running**. |
+| `sh: tsc: not found` during the web build | Fixed — the web Dockerfile installed in one stage and copied only the root `node_modules` into the builder, but npm nests a second copy of a package when two workspaces need different versions (typescript 5.5.4 vs 5.6.3). Install and build now happen in the same stage. If you still see it, `git pull` and retry. |
+| `The "PRISMA_BIN" variable is not set` warning at `up` | Fixed — Compose was eating the `$PRISMA_BIN` in the inline command. Migrations now run from `apps/api/docker-entrypoint.sh` instead of an inline `sh -c` string, so there is nothing for Compose to interpolate. |
 | Build fails with a network error | Docker needs internet for the first image pull / npm install. Retry; if you are on a restricted network, build once on an open network — later builds use the cache. |
+| First build takes ~9 minutes | Normal the first time: the web `npm install` downloads the whole Next toolchain. Later builds reuse the cache and are minutes faster. Don't cancel it mid-install — a half-built layer just rebuilds. |
 
-### The error this setup fixed (2026-11-26)
+### The errors this setup fixed (2026-11-26)
 
 The original `apps/web/Dockerfile` used build context `./apps/web` and ran
 `COPY package.json package-lock.json ./` — but `package-lock.json` only
@@ -244,6 +247,13 @@ CLI it needs for `migrate deploy`; the compose file never set the required
 `ENCRYPTION_KEY`; the worker never called `initRedis()` so it always exited
 1; and there was no root `.dockerignore`, so the web build context was
 408 MB of `node_modules`.
+
+A second pass (same day) fixed the next two failures: `tsc: not found` in
+the web builder (partial `node_modules` copies across stages drop npm's
+nested workspace copies — install and build now share one stage, and both
+runners copy whole workspace dirs) and the `PRISMA_BIN is not set` warning
+(Compose interpolates `$VAR` in command strings — migrations moved into
+`apps/api/docker-entrypoint.sh`).
 
 ## 11. Mobile app (not in Docker)
 
@@ -262,13 +272,20 @@ Point it at the Docker API with `EXPO_PUBLIC_API_URL=http://localhost:4000/api/v
 - `docker-compose.yml` — rewritten: no `version:`, `env_file: .env`,
   correct `DATABASE_URL`/`REDIS_URL` (service names), API + web
   healthchecks, `seed` profile service, named volumes incl. `apistorage`.
+  api/seed start via `apps/api/docker-entrypoint.sh` (migrate + exec).
 - `docker-compose.dev.yml` — new: hot-reload override (tsx watch + next dev).
 - `apps/web/Dockerfile` — rewritten: repo-root context, workspace install,
   builds `@raghumaya/shared` first, `NEXT_PUBLIC_API_URL` as build arg.
+  Install + build share one stage (a split stage dropped npm's nested
+  workspace `node_modules` and broke with `tsc: not found`); the runner
+  copies whole workspace dirs.
 - `apps/api/Dockerfile` — fixed: copies `package-lock.json` + `.npmrc`,
   no longer prunes the `prisma` CLI, resolves the prisma binary
   dynamically (npm hoisting puts it in the root or the workspace `.bin`),
-  API healthcheck.
+  runtime copies the whole `apps/api` dir, API healthcheck.
+- `apps/api/docker-entrypoint.sh` — new: `prisma migrate deploy`, then
+  execs the given command. `.gitattributes` forces LF endings for `*.sh`
+  so Windows checkouts don't break it with CRLF.
 - `apps/api/src/jobs/worker.ts` — bug fix: calls `await initRedis()` before
   checking availability (previously always exited 1).
 - `.dockerignore` — new: keeps `node_modules`/`.next`/`dist`/`.git`/`.env`

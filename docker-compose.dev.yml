@@ -13,10 +13,11 @@ services:
   api:
     environment:
       NODE_ENV: development
-    # Migrate first (fresh DB has no tables), rebuild shared from the
-    # bind-mounted source (host dist may be stale/missing), then tsx watch.
-    # migrate deploy must run from /app — see the Dockerfile note.
-    command: ["sh", "-c", 'PRISMA_BIN=$(ls node_modules/.bin/prisma apps/api/node_modules/.bin/prisma 2>/dev/null | head -n 1); "$PRISMA_BIN" migrate deploy --schema=apps/api/prisma/schema.prisma && npm run build --workspace=@raghumaya/shared && npm run dev --workspace=raghumaya-api']
+    # Entrypoint migrates first (fresh DB has no tables), then rebuild
+    # shared from the bind-mounted source (host dist may be stale/missing)
+    # and start tsx watch. Run through `sh` (not direct exec): on a
+    # Windows checkout the script may not carry the +x bit.
+    command: ["sh", "/app/apps/api/docker-entrypoint.sh", "sh", "-c", "npm run build --workspace=@raghumaya/shared && npm run dev --workspace=raghumaya-api"]
     volumes:
       - .:/app
       - /app/node_modules

@@ -82,9 +82,8 @@ services:
       timeout: 5s
       start_period: 20s
       retries: 5
-    # migrate deploy must run from /app (see Dockerfile note on the
-    # PRISMA_BIN lookup); the prisma CLI may live in either .bin dir.
-    command: ["sh", "-c", 'PRISMA_BIN=$(ls node_modules/.bin/prisma apps/api/node_modules/.bin/prisma 2>/dev/null | head -n 1); "$PRISMA_BIN" migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/server.js']
+    # Entrypoint applies `prisma migrate deploy`, then starts the server.
+    command: ["/app/apps/api/docker-entrypoint.sh", "node", "apps/api/dist/server.js"]
 
   worker:
     build:
@@ -145,7 +144,7 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-raghumaya}:${POSTGRES_PASSWORD:-raghumaya_dev_password}@postgres:5432/${POSTGRES_DB:-raghumaya}
       REDIS_URL: redis://redis:6379
-    command: ["sh", "-c", 'PRISMA_BIN=$(ls node_modules/.bin/prisma apps/api/node_modules/.bin/prisma 2>/dev/null | head -n 1); "$PRISMA_BIN" migrate deploy --schema=apps/api/prisma/schema.prisma && npm run db:seed --workspace=raghumaya-api']
+    command: ["/app/apps/api/docker-entrypoint.sh", "npm", "run", "db:seed", "--workspace=raghumaya-api"]
 
 volumes:
   pgdata:
