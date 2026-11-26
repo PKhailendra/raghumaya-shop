@@ -58,6 +58,10 @@ ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages/shared ./packages/shared
 COPY --from=build /app/apps/api ./apps/api
+# The seed service runs `npm run db:seed --workspace=raghumaya-api` from
+# /app — npm needs the ROOT package.json (the workspaces field) to resolve
+# that. Without it the seed dies with ENOENT on /app/package.json.
+COPY --from=build /app/package.json ./package.json
 
 RUN mkdir -p /app/storage/invoices && chmod +x /app/apps/api/docker-entrypoint.sh
 EXPOSE 4000
