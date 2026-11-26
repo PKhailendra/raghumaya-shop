@@ -13,7 +13,7 @@ Docker — run it on the host, see §11.
 | API | Express 4 + TypeScript, 17 route modules (`auth`, `shops`, `inventory`, `stock`, `purchases`, `billing`, `customers`, `finance`, `analytics`, `reports`, `subscriptions`, `referrals`, `audit`, `notifications`, `hr`, `expenses`, `admin`) | `api` — port 4000 |
 | Background jobs | BullMQ 5 queues: `sms`, `notifications`, `pdf`, `reminders` (in-process fallback when Redis is down) | `worker` (shares the API image) |
 | Shared code | `@raghumaya/shared` workspace (Zod schemas, permissions, API constants) — built inside the images | — |
-| Database | PostgreSQL 16, Prisma 5.22 ORM, 53 models, 5 migrations | `postgres` — port 5432 |
+| Database | PostgreSQL 16, Prisma 5.22 ORM, 53 models, 5 migrations | `postgres` — host port 5433 (5432 inside the container) |
 | Cache / queues | Redis 7 | `redis` — port 6379 |
 | Package manager | npm workspaces (`apps/*`, `packages/*`), `legacy-peer-deps=true` (see `.npmrc`) | — |
 | Mobile | Expo 57 / React Native — **host only**, not containerised | — |
@@ -139,7 +139,7 @@ Stop with `Ctrl+C` (foreground) or `docker compose -f docker-compose.yml -f dock
 
 ## 6. Database
 
-- Host: `localhost`, port `5432`, database `raghumaya`, user `raghumaya`,
+- Host: `localhost`, port `5433`, database `raghumaya`, user `raghumaya`,
   password = `POSTGRES_PASSWORD` from `.env` (`raghumaya_dev_password`).
 - Data lives in the named volume `pgdata` — it survives `docker compose down`
   and container rebuilds. Only `docker compose down -v` (see §9) deletes it.
@@ -157,7 +157,7 @@ npm run db:migrate --workspace=raghumaya-api   # prisma migrate dev (host DB)
 ### Prisma Studio (database browser)
 
 Run it from the host (needs the host `.env` + a local install). Studio
-talks to the Docker Postgres on `localhost:5432` — that is why `.env`
+talks to the Docker Postgres on `localhost:5433` — that is why `.env`
 keeps the `localhost` DATABASE_URL:
 
 ```powershell
@@ -236,6 +236,8 @@ docker compose down -v
 | `sh: tsc: not found` during the web build | Fixed — the web Dockerfile installed in one stage and copied only the root `node_modules` into the builder, but npm nests a second copy of a package when two workspaces need different versions (typescript 5.5.4 vs 5.6.3). Install and build now happen in the same stage. If you still see it, `git pull` and retry. |
 | `The "PRISMA_BIN" variable is not set` warning at `up` | Fixed — Compose was eating the `$PRISMA_BIN` in the inline command. Migrations now run from `apps/api/docker-entrypoint.sh` instead of an inline `sh -c` string, so there is nothing for Compose to interpolate. |
 | `Could not parse schema engine response` + `Prisma failed to detect the libssl/openssl version` | Fixed — `node:20-alpine` ships no `openssl`, so Prisma defaulted to the openssl-1.1.x engine, which Alpine cannot load (the schema engine then prints `Error loading shared library...` instead of JSON). Both stages of `apps/api/Dockerfile` now `apk add openssl`, so the 3.0.x engines are used. If you still see it, `git pull` and rebuild. |
+| `prisma generate` fails with `Could not resolve @prisma/client` | You ran it from inside `apps/api`. The client is hoisted to the repo-root `node_modules`, so generate must run from the repo root — and `npx prisma` doesn't work there either (npm nests the CLI binary under `apps/api/node_modules/.bin`, it isn't in the root `.bin`). Run from the root with the direct path: `.\apps\api\node_modules\.bin\prisma generate --schema=apps\api\prisma\schema.prisma`. Note: generate auto-adds `@prisma/client` to the *root* `package.json` — it isn't needed there, so afterwards run `git checkout -- package.json package-lock.json` if they show as modified. |
+| `'prisma' is not recognized` / `npm run start:api:prod` fails | Same nested-binary cause as above. Fixed — the root script now uses a workspace script instead of bare `npx`: `npm run db:deploy --workspace=raghumaya-api` (new `db:deploy` script in `apps/api/package.json` runs `prisma migrate deploy` with cwd=`apps/api`, where the binary and the default schema path resolve). `git pull` and retry. |
 | Build fails with a network error | Docker needs internet for the first image pull / npm install. Retry; if you are on a restricted network, build once on an open network — later builds use the cache. |
 | First build takes ~9 minutes | Normal the first time: the web `npm install` downloads the whole Next toolchain. Later builds reuse the cache and are minutes faster. Don't cancel it mid-install — a half-built layer just rebuilds. |
 
@@ -341,3 +343,15 @@ Then start Metro with `npm run dev:mobile` from the root. You should see
   `JWT_REFRESH_SECRET`, `S3_*`, `SMS_PROVIDER` removed; required
   `JWT_SECRET` + `ENCRYPTION_KEY` documented with generation commands).
 - `DOCKER_SETUP.md` — this file.
+- `apps/api/package.json` — new `db:deploy` script (`prisma migrate deploy`,
+  run with cwd=`apps/api` so the binary and default schema path resolve).
+- `package.json` (root) — `start:api:prod` no longer calls bare `npx prisma`
+  (which fails from the root — the CLI binary is nested under
+  `apps/api/node_modules/.bin`); it now runs
+  `npm run db:deploy --workspace=raghumaya-api` first.
+- `docker-compose.yml` + `.env.example` + `DOCKER_SETUP.md` — host Postgres
+  port corrected to `5433` everywhere (the repo default since the port
+  change; the container still uses `5432` internally).
+- `DEBUGGING_REPORT.md`, `FIXES_AND_RESOLUTION.md`,
+  `FINAL_VERIFICATION_REPORT.md` — full audit + verification records
+  (2026-11-27).

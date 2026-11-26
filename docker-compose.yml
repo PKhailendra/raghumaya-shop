@@ -8,7 +8,7 @@
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 #
 # Services:
-#   postgres  PostgreSQL 16 (port 5432)
+#   postgres  PostgreSQL 16 (host port 5433, container 5432)
 #   redis     Redis 7 (port 6379)
 #   api       Express API (port 4000) — runs `prisma migrate deploy` on start
 #   worker    BullMQ background worker (shares the API image)
