@@ -13,7 +13,10 @@ export function initRedis(): Promise<boolean> {
     try {
       client = new Redis(env.REDIS_URL, {
         lazyConnect: true,
-        maxRetriesPerRequest: 1,
+        // BullMQ REQUIRES maxRetriesPerRequest:null — its Workers use
+        // blocking commands, and it throws "Your redis options
+        // maxRetriesPerRequest must be null" for any other value.
+        maxRetriesPerRequest: null,
         enableOfflineQueue: false,
         connectTimeout: 3000,
       });
@@ -26,15 +29,18 @@ export function initRedis(): Promise<boolean> {
       // so ping() alone can NEVER succeed here, even with Redis healthy.
       // That was the worker's restart loop: initRedis() always returned
       // false and the worker always exited 1. Await the connection
-      // explicitly first (the race bounds it: a dead Redis fails fast
-      // instead of hanging on ioredis' reconnect loop).
+      // explicitly first. The race bounds the whole attempt: a dead Redis
+      // fails fast instead of hanging on ioredis' reconnect loop (which
+      // is infinite with maxRetriesPerRequest:null).
       await Promise.race([
-        client.connect(),
+        (async () => {
+          await client.connect();
+          await client.ping();
+        })(),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('redis connect timeout')), 4000),
         ),
       ]);
-      await client.ping();
       redis = client;
       redisAvailable = true;
       return true;
