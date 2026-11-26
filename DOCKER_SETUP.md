@@ -257,7 +257,9 @@ runners copy whole workspace dirs) and the `PRISMA_BIN is not set` warning
 
 ## 11. Mobile app (not in Docker)
 
-Expo needs a phone/emulator and Metro on the host. From the repo root:
+Expo needs a phone/emulator and Metro on the host. **Always install from
+the repo root, never inside `apps/mobile`** — see the troubleshooting note
+below. From the repo root:
 
 ```powershell
 npm install
@@ -266,6 +268,42 @@ npm run dev:mobile
 
 Point it at the Docker API with `EXPO_PUBLIC_API_URL=http://localhost:4000/api/v1`
 (or your machine's LAN IP when testing on a physical phone).
+
+### Mobile troubleshooting: `PluginError: Cannot find module 'expo/config-plugins'`
+
+Symptom: `npm run start` in `apps/mobile` dies while loading the Expo
+config, with a require stack ending in
+`node_modules\expo-router\plugin\build\withRouter.js`.
+
+Cause: a split `node_modules` tree. npm hoists `expo-router` to the repo
+root but nests `expo` itself under `apps/mobile/node_modules`, so the
+hoisted router can't see `expo/config-plugins`. A clean reinstall alone
+does **not** fix it — npm rebuilds the same split tree. This usually comes
+from running `npm install` inside `apps/mobile` (or another workspace
+folder) instead of the repo root.
+
+Fix (already in the repo — `expo` is pinned as a root devDependency so npm
+keeps one copy at the root, where the hoisted router can see it):
+
+```powershell
+cd D:\Projects\raghumaya-shop
+git pull
+npm install          # from the REPO ROOT, not apps/mobile
+npm run dev:mobile
+```
+
+If the error still appears after that, delete the broken trees and install
+once from the root (safe — `node_modules` is regenerable, nothing in it
+is source code):
+
+```powershell
+Remove-Item -Recurse -Force node_modules, apps\api\node_modules, apps\web\node_modules, apps\mobile\node_modules, packages\shared\node_modules
+npm install
+npm run dev:mobile
+```
+
+Then start Metro with `npm run dev:mobile` from the root. You should see
+`Starting Metro Bundler` and `Waiting on http://localhost:8081`.
 
 ## 12. Files changed for Docker (2026-11-26)
 
@@ -288,6 +326,11 @@ Point it at the Docker API with `EXPO_PUBLIC_API_URL=http://localhost:4000/api/v
   so Windows checkouts don't break it with CRLF.
 - `apps/api/src/jobs/worker.ts` — bug fix: calls `await initRedis()` before
   checking availability (previously always exited 1).
+- `package.json` + `package-lock.json` — `expo ~57.0.0` added as a root
+  devDependency so npm hoists one copy to the repo root (fixes the mobile
+  `expo/config-plugins` error; the Docker api/web filtered installs do
+  not pull it in — verified with a scratch filtered install: 174
+  packages, no `expo`).
 - `.dockerignore` — new: keeps `node_modules`/`.next`/`dist`/`.git`/`.env`
   out of build contexts.
 - `.env.example` — rewritten to match the real env schema in
