@@ -1,0 +1,34 @@
+# Root .dockerignore — applies to every build with context "." (api, worker, web).
+# Keeps node_modules / build output / secrets out of the build context, so
+# `docker compose up --build` sends megabytes, not the ~400 MB seen before.
+# NOTE: package-lock.json, .npmrc and every package.json are intentionally
+# NOT ignored — the Dockerfiles need them for deterministic installs.
+.git
+.github
+node_modules
+apps/*/node_modules
+packages/*/node_modules
+.next
+apps/*/.next
+dist
+apps/*/dist
+packages/*/dist
+build
+apps/*/build
+out
+.expo
+apps/mobile/.expo
+coverage
+.nyc_output
+*.log
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+.env
+.env.local
+.env.*.local
+storage
+apps/api/storage
+.DS_Store
+docs
+*.md
+!DOCKER_SETUP.md

@@ -1,0 +1,53 @@
+# RaghuMayaShop — development override (hot reload)
+# Usage:
+#   cp .env.example .env   # fill in JWT_SECRET + ENCRYPTION_KEY
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# api runs `tsx watch` (restarts on src change), web runs `next dev`.
+# Source is bind-mounted, so edits on Windows appear inside the containers.
+# node_modules are anonymous volumes so the containers keep their own
+# Linux-built modules instead of the Windows host's node_modules.
+# Postgres/Redis are unchanged from the base file (named volumes persist).
+
+services:
+  api:
+    environment:
+      NODE_ENV: development
+    # Migrate first (fresh DB has no tables), rebuild shared from the
+    # bind-mounted source (host dist may be stale/missing), then tsx watch.
+    # migrate deploy must run from /app — see the Dockerfile note.
+    command: ["sh", "-c", 'PRISMA_BIN=$(ls node_modules/.bin/prisma apps/api/node_modules/.bin/prisma 2>/dev/null | head -n 1); "$PRISMA_BIN" migrate deploy --schema=apps/api/prisma/schema.prisma && npm run build --workspace=@raghumaya/shared && npm run dev --workspace=raghumaya-api']
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/api/node_modules
+      - /app/apps/web/node_modules
+      - /app/apps/mobile/node_modules
+      - /app/packages/shared/node_modules
+      - apistorage:/app/storage
+
+  worker:
+    environment:
+      NODE_ENV: development
+    command: ["sh", "-c", "npm run build --workspace=@raghumaya/shared && npm run worker --workspace=raghumaya-api"]
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/api/node_modules
+      - /app/packages/shared/node_modules
+
+  web:
+    environment:
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Polling watchers: bind mounts from Windows don't always emit
+      # filesystem events inside the container; polling keeps hot reload
+      # reliable at the cost of a little CPU.
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    command: ["sh", "-c", "npm run build --workspace=@raghumaya/shared && npm run dev --workspace=raghumaya-web"]
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/web/node_modules
+      - /app/packages/shared/node_modules

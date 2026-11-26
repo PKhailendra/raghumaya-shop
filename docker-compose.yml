@@ -1,14 +1,19 @@
-# RaghuMayaShop — local development stack
-# Usage: docker compose up --build
+# RaghuMayaShop — local stack (production builds, for running the app)
+# Usage:
+#   cp .env.example .env   # fill in JWT_SECRET + ENCRYPTION_KEY (see .env.example)
+#   docker compose up -d --build
+#   docker compose --profile seed run --rm seed   # demo data, once
+#
+# For development with hot reload instead, use:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 #
 # Services:
 #   postgres  PostgreSQL 16 (port 5432)
 #   redis     Redis 7 (port 6379)
-#   api       RaghuMayaShop Express API (port 4000)
+#   api       Express API (port 4000) — runs `prisma migrate deploy` on start
 #   worker    BullMQ background worker (shares the API image)
-#   web       Next.js dashboard placeholder (port 3000) — built by the web agent
-
-version: "3.9"
+#   web       Next.js dashboard (port 3000)
+#   seed      one-off demo seed (profile "seed" only, not started by `up`)
 
 services:
   postgres:
@@ -16,15 +21,15 @@ services:
     container_name: raghumaya-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: raghumaya
-      POSTGRES_PASSWORD: raghumaya
-      POSTGRES_DB: raghumaya
+      POSTGRES_USER: ${POSTGRES_USER:-raghumaya}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-raghumaya_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-raghumaya}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U raghumaya -d raghumaya"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-raghumaya} -d ${POSTGRES_DB:-raghumaya}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -54,16 +59,32 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # Secrets (JWT_SECRET, ENCRYPTION_KEY, mail keys) come from .env via
+    # env_file — never hardcode them here. The environment: block below
+    # only overrides the values that must point at Docker service names
+    # instead of localhost (DATABASE_URL, REDIS_URL, CORS_ORIGINS).
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgresql://raghumaya:raghumaya@postgres:5432/raghumaya
+      DATABASE_URL: postgresql://${POSTGRES_USER:-raghumaya}:${POSTGRES_PASSWORD:-raghumaya_dev_password}@postgres:5432/${POSTGRES_DB:-raghumaya}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: change-me-to-a-long-random-secret
+      API_BASE_URL: http://localhost:4000
       CORS_ORIGINS: http://localhost:3000
     ports:
       - "4000:4000"
-    command: ["sh", "-c", "npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/server.js"]
+    volumes:
+      - apistorage:/app/storage
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+    # migrate deploy must run from /app (see Dockerfile note on the
+    # PRISMA_BIN lookup); the prisma CLI may live in either .bin dir.
+    command: ["sh", "-c", 'PRISMA_BIN=$(ls node_modules/.bin/prisma apps/api/node_modules/.bin/prisma 2>/dev/null | head -n 1); "$PRISMA_BIN" migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/server.js']
 
   worker:
     build:
@@ -76,26 +97,57 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://raghumaya:raghumaya@postgres:5432/raghumaya
+      DATABASE_URL: postgresql://${POSTGRES_USER:-raghumaya}:${POSTGRES_PASSWORD:-raghumaya_dev_password}@postgres:5432/${POSTGRES_DB:-raghumaya}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: change-me-to-a-long-random-secret
     command: ["node", "apps/api/dist/jobs/worker.js"]
 
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./apps/web/Dockerfile
+      args:
+        # NEXT_PUBLIC_* is inlined at build time — this arg is what the
+        # browser actually calls. Keep it http://localhost:4000 for local.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api/v1}
     container_name: raghumaya-web
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api/v1}
     ports:
       - "3000:3000"
+
+  # One-off demo seed (super admin + demo shop + products). Idempotent-ish:
+  # it skips if the demo shop already exists. Only runs when asked:
+  #   docker compose --profile seed run --rm seed
+  seed:
+    profiles: ["seed"]
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+    container_name: raghumaya-seed
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-raghumaya}:${POSTGRES_PASSWORD:-raghumaya_dev_password}@postgres:5432/${POSTGRES_DB:-raghumaya}
+      REDIS_URL: redis://redis:6379
+    command: ["sh", "-c", 'PRISMA_BIN=$(ls node_modules/.bin/prisma apps/api/node_modules/.bin/prisma 2>/dev/null | head -n 1); "$PRISMA_BIN" migrate deploy --schema=apps/api/prisma/schema.prisma && npm run db:seed --workspace=raghumaya-api']
 
 volumes:
   pgdata:
   redisdata:
+  apistorage:

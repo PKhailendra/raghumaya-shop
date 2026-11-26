@@ -5,11 +5,15 @@
  */
 import 'dotenv/config';
 import { Worker } from 'bullmq';
-import { isRedisAvailable, getRedis } from '../lib/redis';
+import { initRedis, isRedisAvailable, getRedis } from '../lib/redis';
 import { runInline } from './fallback';
 
 async function main() {
-  if (!isRedisAvailable()) {
+  // initRedis() must run first: isRedisAvailable() is false until the
+  // connection attempt happens. Without this call the worker always
+  // exited 1 at startup, even with Redis healthy (Docker worker bug).
+  const redisOk = await initRedis();
+  if (!redisOk || !isRedisAvailable()) {
     console.error('[worker] Redis not available — worker cannot start. Jobs will run via the in-process fallback.');
     process.exit(1);
   }
