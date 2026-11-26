@@ -36,8 +36,10 @@ result is claimed that was not actually executed.
 | Migrations applied in Docker | ✅ Passed (Windows) | Entrypoint `migrate deploy` on api start; seed log: "No pending migrations to apply" |
 | DB reachable from inside containers | ✅ Passed (Windows) | API + worker + seed connect via `postgres:5432` (service name, not localhost) |
 | `migrate deploy` from host (new `db:deploy`) | ✅ Passed (VM, partial) | `npm run db:deploy --workspace=raghumaya-api -- --help` prints the help (binary resolves from the root); the real deploy needs a live DB |
-| Full `start:api:prod` chain | 🔒 Blocked | Needs a live DB on the user's machine; `db:deploy` step proven, seed/start steps pending |
-| Untracked migration `20261126184830_new_init` | 🔒 Blocked | Exists only on the user's Windows machine; needs their review of `migration.sql` before committing |
+| Full `start:api:prod` chain | 🔒 Blocked (fix applied, re-run pending) | `db:deploy` ✅ (6 migrations, no pending) and local `db:seed` ✅ (see below) both passed on Windows 2026-11-27 01:03 IST; the chain then failed on `npm start` because `dist/` was never built (D-17) — the build step has been added to the script, re-run pending |
+| Local `db:seed` (host) | ✅ Passed (Windows) | 2026-11-27 01:03 IST: super admin `admin@raghumaya.shop`, demo owner `owner@demo.shop`, shop "Raghu Maya General Store" (85ebcbdc-2cf1-4bba-ac45-efac7ca829f5) |
+| Docker seed (`--profile seed`) | ⏭️ Not tested | Fix `56ab9b2` still unverified in Docker; local seed passed instead |
+| Untracked migration `20261126184830_new_init` | 🔒 Blocked | Exists in the user's local `prisma/migrations` (deploy found 6 migrations) but its git status is unknown — needs their review of `migration.sql` and a commit before anyone else can apply it |
 | No `prisma db push` used | ✅ Passed | All schema changes go through migrations; no push anywhere in the history |
 
 ## 3. Application
@@ -56,7 +58,7 @@ result is claimed that was not actually executed.
 | Worker running (BullMQ) | ✅ Passed (Windows) | User confirmed 2026-11-27 00:28 IST after rebuild |
 | Redis really used (not fallback) | ✅ Passed (Windows) | Worker + API connect to `redis:6379`; VM log shows the in-process fallback only because the VM has no Redis |
 | Frontend ↔ backend communication | ✅ Passed (Windows) | Web healthy with `depends_on: api: service_healthy`; `NEXT_PUBLIC_API_URL` baked at build time |
-| End-to-end login with seed credentials | 🔒 Blocked | Seed not yet run successfully (Docker seed unverified, local seed in progress) |
+| End-to-end login with seed credentials | 🔒 Blocked | Local seed passed (see §2); blocked on the API running — the `start:api:prod` build step was just added, re-run pending, then login at http://localhost:3000 |
 | Unit / integration tests | ⏭️ Not tested | No test suite exists in the repo |
 
 ## 4. Environment & configuration
@@ -81,7 +83,9 @@ result is claimed that was not actually executed.
 
 - `apps/api/package.json`: new `db:deploy` script.
 - `package.json` (root): `start:api:prod` uses `db:deploy`
-  (no bare `npx prisma`).
+  (no bare `npx prisma`) and now builds the API before starting it
+  (D-17: `dist/` is gitignored, so a fresh checkout has no `server.js`
+  until `tsc` runs).
 - `.env.example`, `docker-compose.yml`, `DOCKER_SETUP.md`: host
   Postgres port 5432 → 5433.
 - `DOCKER_SETUP.md` §10: two new troubleshooting rows (nested

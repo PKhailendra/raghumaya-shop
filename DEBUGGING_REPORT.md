@@ -216,6 +216,23 @@ email all optional).
 - **Verified (VM):** grep shows no remaining stale host-side `5432`
   references (container-internal ones kept).
 
+### D-17 — `start:api:prod`: `Cannot find module '.../apps/api/dist/server.js'`
+- **Severity:** High (host workflow). After generate + seed both
+  succeeded (2026-11-27 01:03 IST), `npm start` failed: `dist/` does
+  not exist — the API was never built. `npm start` runs
+  `node dist/server.js`, which needs `tsc` first, and `dist/` is
+  gitignored, so a fresh checkout never has it.
+- **Root cause:** the `start:api:prod` script chained deploy → seed →
+  start with no build step.
+- **Fix:** the root script now runs `npm run build
+  --workspace=raghumaya-api` before `npm start`.
+- **Verified (VM):** `npm run build --workspace=raghumaya-api` (tsc)
+  passes clean. Full chain re-run pending on the user's machine.
+- **Side note:** generate printed an update notice (Prisma 5.22.0 →
+  8.0.0-rc.36). **Do not upgrade** — 8.x is a release candidate and
+  Prisma 7/8 engine downloads are unverified through this network;
+  the project stays on 5.22.0.
+
 ### D-16 — Debug Agent skill install: first attempt stalled
 - **Severity:** Low (tooling, not the app). `npx debug-agent@latest init`
   appeared hung for 6+ minutes with no output. Root cause: the CLI is
